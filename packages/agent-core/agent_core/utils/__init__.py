@@ -43,6 +43,14 @@ from agent_core.utils.token_counter import (
     get_window_manager,
 )
 
+# Export response evaluator
+from agent_core.utils.response_evaluator import (
+    ResponseEvaluator,
+    EvaluationScore,
+    get_evaluator,
+    reset_evaluator,
+)
+
 # Prompt injection patterns to block
 INJECTION_PATTERNS = [
     # Direct instruction override attempts

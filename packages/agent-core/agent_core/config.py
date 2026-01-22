@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # MaximAI (Evaluation)
     maxim_api_key: str = Field(default="", description="MaximAI API key")
 
+    # Cloudflare Turnstile (CAPTCHA)
+    turnstile_secret_key: str = Field(default="", description="Cloudflare Turnstile secret key")
+    turnstile_site_key: str = Field(default="", description="Cloudflare Turnstile site key")
+
     # Upstash Redis
     upstash_redis_rest_url: str = Field(default="", description="Upstash Redis REST URL")
     upstash_redis_rest_token: str = Field(default="", description="Upstash Redis REST token")

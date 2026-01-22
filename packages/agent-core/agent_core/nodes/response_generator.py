@@ -21,6 +21,7 @@ from agent_core.prompts import (
 from agent_core.state import AgentState, NodeTiming
 from agent_core.utils import (
     CircuitBreakerError,
+    get_evaluator,
     get_openai_breaker,
     get_token_counter,
     get_tracer,
@@ -130,6 +131,27 @@ def response_generator_node(state: AgentState) -> Dict[str, Any]:
             config={"callbacks": callbacks} if callbacks else {},
         )
         response_text = response.content
+
+        # Evaluate response quality
+        evaluator = get_evaluator()
+        evaluation_score = evaluator.evaluate_response_sync(
+            query=state["current_input"],
+            response=response_text,
+            context=context_text,
+            session_id=session_id,
+            trace_id=trace_id
+        )
+
+        # Log evaluation to Langfuse if available
+        if evaluation_score and tracer.enabled:
+            tracer.langfuse.score(
+                trace_id=trace_id,
+                name="response_quality",
+                value=evaluation_score.overall,
+                comment=f"Relevance: {evaluation_score.relevance:.2f}, "
+                        f"Accuracy: {evaluation_score.accuracy:.2f}, "
+                        f"Helpfulness: {evaluation_score.helpfulness:.2f}"
+            )
 
         # Count actual tokens used
         input_tokens = token_counter.count_messages_tokens([
@@ -353,6 +375,27 @@ async def response_generator_streaming(
     # Count output tokens accurately
     output_tokens = token_counter.count_tokens(full_response)
     total_tokens = input_tokens + output_tokens
+
+    # Evaluate response quality (async)
+    evaluator = get_evaluator()
+    evaluation_score = await evaluator.evaluate_response(
+        query=state["current_input"],
+        response=full_response,
+        context=context_text,
+        session_id=session_id,
+        trace_id=trace_id
+    )
+
+    # Log evaluation to Langfuse if available
+    if evaluation_score and tracer.enabled:
+        tracer.langfuse.score(
+            trace_id=trace_id,
+            name="response_quality",
+            value=evaluation_score.overall,
+            comment=f"Relevance: {evaluation_score.relevance:.2f}, "
+                    f"Accuracy: {evaluation_score.accuracy:.2f}, "
+                    f"Helpfulness: {evaluation_score.helpfulness:.2f}"
+        )
 
     end_time = int(time.time() * 1000)
 

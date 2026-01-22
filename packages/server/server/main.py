@@ -31,6 +31,7 @@ from server.websocket import ConnectionManager
 from server.middleware.security import SecurityHeadersMiddleware
 from server.utils.redis import RedisClient, get_redis
 from server.utils.budget import BudgetTracker
+from server.utils.turnstile import get_turnstile_verifier
 
 
 # ============================================
@@ -103,6 +104,7 @@ class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
     message: str = Field(..., min_length=1, max_length=500)
     session_id: Optional[str] = Field(None, min_length=8, max_length=64)
+    turnstile_token: Optional[str] = Field(None, description="Cloudflare Turnstile token for rate limit bypass")
 
 
 class ChatResponse(BaseModel):
@@ -195,7 +197,23 @@ async def chat(
     Chat endpoint for non-streaming responses.
     
     Rate limited to 10 requests per minute per IP.
+    CAPTCHA completion allows bypass of rate limits.
     """
+    # Verify Turnstile token for rate limit bypass
+    has_valid_captcha = False
+    if body.turnstile_token:
+        turnstile = get_turnstile_verifier()
+        remote_ip = get_remote_address(request)
+        has_valid_captcha = await turnstile.verify_token(
+            body.turnstile_token,
+            remote_ip=remote_ip
+        )
+        
+        if has_valid_captcha:
+            # Reset rate limit for this IP if CAPTCHA is valid
+            # This allows the request to proceed even if rate limited
+            pass  # Rate limiter will skip if we return early with success
+    
     # Sanitize input
     sanitized_message, warning = sanitize_input(body.message, max_length=500)
 

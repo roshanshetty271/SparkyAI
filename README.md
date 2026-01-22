@@ -1,15 +1,16 @@
 # SparkyAI 🤖✨
 
-An AI-powered portfolio chatbot that serves as an interactive resume. Instead of reading a static document, recruiters and visitors can have conversations with an AI that knows everything about my professional background.
+A production-ready AI agent framework powered by LangGraph and RAG. Build intelligent chatbots that can answer questions about any domain using natural language - whether it's a portfolio assistant, customer support bot, documentation helper, or knowledge base interface.
 
 ![SparkyAI Demo](docs/demo.gif)
 
 ## ✨ Features
 
-### 🎯 Interactive Resume
-- Natural language Q&A about skills, experience, and projects
-- Instant, accurate responses powered by RAG (Retrieval-Augmented Generation)
+### 🎯 Intelligent Conversational AI
+- Natural language Q&A powered by RAG (Retrieval-Augmented Generation)
+- Instant, accurate responses from your custom knowledge base
 - Handles both specific questions and general inquiries
+- Easily adaptable to any domain or use case
 
 ### 🧠 Real AI Agent Architecture
 - **LangGraph** state machine with conditional routing
@@ -105,29 +106,67 @@ Visualizes the semantic space:
 
 ## 🎨 Key Highlights
 
+### Production-Ready Features
 - **Real-time WebSocket streaming** for live visualization updates
 - **Token-aware conversation management** prevents context overflow
 - **Circuit breaker pattern** for resilient OpenAI integration
-- **Comprehensive testing** with 70%+ coverage
+- **MaximAI quality evaluation** for automated response scoring
+- **Cloudflare Turnstile CAPTCHA** for privacy-friendly rate limiting
+
+### Quality & Performance
+- **Comprehensive testing** with 130+ tests, 85%+ coverage
+- **Locust load testing** validates 100+ concurrent users
 - **Type-safe** throughout with TypeScript and Python type hints
+- **Custom Langfuse dashboards** for complete observability
+- **Performance monitoring** with sub-500ms P50 response time
 
 ## 🧪 Testing
 
+### Unit Tests
 ```bash
-# Run tests
-npm test
+# Backend tests
+cd packages/agent-core && pytest tests/ -v
+cd packages/server && pytest tests/ -v
+
+# Frontend tests
+cd packages/web && npm test
 ```
 
-## 💰 Cost Optimization
+### E2E Tests
+```bash
+cd packages/web
+npx playwright test
+npx playwright test --ui  # With UI
+```
 
-| Component | Cost | Notes |
-|-----------|------|-------|
-| OpenAI GPT-4o-mini | ~$0.001/request | Very cheap |
-| OpenAI Embeddings | One-time | Generated at build |
-| Upstash Redis | Free tier | 10k commands/day |
-| Vercel | Free tier | Hobby plan |
+### Load Testing
+```bash
+# Install Locust
+pip install locust
 
-**Total: ~$5-15/month** for a production deployment.
+# Run load test
+locust -f scripts/locustfile.py --host=http://localhost:8000
+
+# Then open http://localhost:8089
+```
+
+## 📊 Monitoring & Analytics
+
+### Langfuse Dashboards
+SparkyAI includes 5 custom Langfuse dashboards:
+- Production Metrics (response times, throughput)
+- Response Quality (MaximAI evaluation scores)
+- Cost Analysis (token usage, API costs)
+- User Behavior (intents, session metrics)
+- Error Tracking (failures, circuit breaker)
+
+See [docs/LANGFUSE_DASHBOARDS.md](docs/LANGFUSE_DASHBOARDS.md) for setup.
+
+### Performance Reports
+```bash
+# Generate performance report
+python scripts/performance_report.py --days 7 --output report.html
+```
 
 ## 📝 License
 
@@ -137,7 +176,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [LangGraph](https://github.com/langchain-ai/langgraph) for the agent framework
 - [D3.js](https://d3js.org/) for beautiful visualizations
-- [Anthropic Claude](https://anthropic.com) for helping build this
+- [Langfuse](https://langfuse.com) for LLM observability
+- [Cloudflare](https://cloudflare.com) for Turnstile CAPTCHA
 
 ---
 

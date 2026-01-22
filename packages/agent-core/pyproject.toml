@@ -22,6 +22,7 @@ dependencies = [
     
     # Observability
     "langfuse>=2.0.0",
+    "maxim-py>=3.14.0",
     
     # Vector store
     "qdrant-client>=1.7.0",

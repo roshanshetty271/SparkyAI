@@ -19,12 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
-    services:
-      # Optional: Run backend service for E2E tests
-      # backend:
-      #   image: python:3.11
-      #   ports:
-      #     - 8000:8000
+    # Note: Backend is started manually in steps below
+    # To use a containerized backend service, uncomment:
+    # services:
+    #   backend:
+    #     image: python:3.11
+    #     ports:
+    #       - 8000:8000
     
     steps:
       - name: Checkout code
@@ -62,13 +63,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: packages/web/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: packages/web
         run: |
-          npm ci
+          npm install
           npx playwright install --with-deps chromium firefox webkit
 
       - name: Build frontend
@@ -141,13 +140,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: packages/web/package-lock.json
 
       - name: Install dependencies
         working-directory: packages/web
         run: |
-          npm ci
+          npm install
           npx playwright install --with-deps chromium
 
       - name: Run visual regression tests

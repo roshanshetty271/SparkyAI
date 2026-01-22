@@ -1,12 +1,32 @@
 """
-Security Utilities
-==================
+Agent Utilities
+================
 
-Input sanitization, prompt injection detection, and rate limiting helpers.
+Input sanitization, prompt injection detection, rate limiting helpers,
+and conversation management utilities.
 """
 
 import re
 from typing import Tuple, Optional
+
+# Export token counter and window manager
+from agent_core.utils.token_counter import (
+    TokenCounter,
+    ConversationWindowManager,
+    get_token_counter,
+    get_window_manager,
+    format_conversation_for_llm,
+)
+
+# Export circuit breaker
+from agent_core.utils.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerError,
+    CircuitState,
+    get_openai_breaker,
+    get_embedding_breaker,
+    reset_all_breakers,
+)
 
 
 # Prompt injection patterns to block

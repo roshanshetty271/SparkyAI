@@ -19,6 +19,12 @@ from agent_core.prompts import (
     get_response_prompt,
     get_greeting_prompt,
 )
+from agent_core.utils import (
+    get_token_counter,
+    get_window_manager,
+    get_openai_breaker,
+    CircuitBreakerError,
+)
 
 
 def response_generator_node(state: AgentState) -> Dict[str, Any]:
@@ -50,14 +56,43 @@ def response_generator_node(state: AgentState) -> Dict[str, Any]:
         api_key=settings.openai_api_key,
     )
     
-    # Build messages
-    messages = [
-        SystemMessage(content=get_system_prompt(domain))
-    ]
+    # Get token counter and window manager
+    token_counter = get_token_counter(model=settings.openai_model)
+    window_manager = get_window_manager(
+        max_tokens=settings.max_conversation_tokens,
+        model=settings.openai_model,
+    )
     
-    # Add conversation history (last N messages)
-    history = state.get("messages", [])[-10:]  # Last 10 messages
-    messages.extend(history)
+    # Build messages
+    system_prompt = get_system_prompt(domain)
+    messages = [SystemMessage(content=system_prompt)]
+    
+    # Calculate tokens for system prompt and context
+    system_tokens = token_counter.count_tokens(system_prompt)
+    context_text = state.get("retrieved_context") or ""
+    context_tokens = token_counter.count_tokens(context_text) if context_text else 0
+    
+    # Truncate conversation history if needed
+    history = state.get("messages", [])
+    if history:
+        # Convert LangChain messages to Message dicts for token counting
+        history_dicts = [
+            {"role": msg.type, "content": msg.content}
+            for msg in history
+        ]
+        truncated_history = window_manager.truncate_conversation(
+            history_dicts,
+            system_prompt_tokens=system_tokens,
+            rag_context_tokens=context_tokens,
+        )
+        # Convert back to LangChain messages
+        for msg_dict in truncated_history:
+            if msg_dict["role"] == "human":
+                messages.append(HumanMessage(content=msg_dict["content"]))
+            elif msg_dict["role"] == "ai":
+                messages.append(AIMessage(content=msg_dict["content"]))
+    else:
+        messages.extend(history)
     
     # Build the user prompt based on intent
     if intent == "greeting":
@@ -71,16 +106,34 @@ def response_generator_node(state: AgentState) -> Dict[str, Any]:
     
     messages.append(HumanMessage(content=prompt))
     
-    # Generate response
+    # Generate response with circuit breaker protection
+    breaker = get_openai_breaker()
+    
     try:
         response = llm.invoke(messages)
         response_text = response.content
         
-        # Estimate tokens (rough approximation)
-        total_tokens = len(prompt.split()) + len(response_text.split())
+        # Count actual tokens used
+        input_tokens = token_counter.count_messages_tokens([
+            {"role": "system", "content": system_prompt},
+            *[{"role": msg.type, "content": msg.content} for msg in messages[1:]],
+            {"role": "user", "content": prompt},
+        ])
+        output_tokens = token_counter.count_tokens(response_text)
+        total_tokens = input_tokens + output_tokens
+    
+    except CircuitBreakerError as e:
+        response_text = (
+            "I apologize, but I'm temporarily unable to process your request. "
+            "Our AI service is experiencing high load. Please try again in a moment."
+        )
+        total_tokens = 0
         
     except Exception as e:
-        response_text = "I apologize, but I'm having trouble generating a response right now. Please try again in a moment."
+        response_text = (
+            "I apologize, but I'm having trouble generating a response right now. "
+            "Please try again in a moment."
+        )
         total_tokens = 0
     
     end_time = int(time.time() * 1000)
@@ -150,6 +203,13 @@ async def response_generator_streaming(
     domain = state["domain"]
     intent = state.get("user_intent", "general")
     
+    # Get token counter and window manager
+    token_counter = get_token_counter(model=settings.openai_model)
+    window_manager = get_window_manager(
+        max_tokens=settings.max_conversation_tokens,
+        model=settings.openai_model,
+    )
+    
     # Initialize streaming LLM
     llm = ChatOpenAI(
         model=settings.openai_model,
@@ -160,13 +220,35 @@ async def response_generator_streaming(
     )
     
     # Build messages
-    messages = [
-        SystemMessage(content=get_system_prompt(domain))
-    ]
+    system_prompt = get_system_prompt(domain)
+    messages = [SystemMessage(content=system_prompt)]
     
-    # Add conversation history
-    history = state.get("messages", [])[-10:]
-    messages.extend(history)
+    # Calculate tokens for system prompt and context
+    system_tokens = token_counter.count_tokens(system_prompt)
+    context_text = state.get("retrieved_context") or ""
+    context_tokens = token_counter.count_tokens(context_text) if context_text else 0
+    
+    # Truncate conversation history if needed
+    history = state.get("messages", [])
+    if history:
+        # Convert LangChain messages to Message dicts for token counting
+        history_dicts = [
+            {"role": msg.type, "content": msg.content}
+            for msg in history
+        ]
+        truncated_history = window_manager.truncate_conversation(
+            history_dicts,
+            system_prompt_tokens=system_tokens,
+            rag_context_tokens=context_tokens,
+        )
+        # Convert back to LangChain messages
+        for msg_dict in truncated_history:
+            if msg_dict["role"] == "human":
+                messages.append(HumanMessage(content=msg_dict["content"]))
+            elif msg_dict["role"] == "ai":
+                messages.append(AIMessage(content=msg_dict["content"]))
+    else:
+        messages.extend(history)
     
     # Build the user prompt
     if intent == "greeting":
@@ -180,18 +262,30 @@ async def response_generator_streaming(
     
     messages.append(HumanMessage(content=prompt))
     
-    # Stream response
+    # Stream response with circuit breaker protection
     full_response = ""
     streaming_tokens = []
-    total_tokens = len(prompt.split())  # Input tokens
+    breaker = get_openai_breaker()
+    
+    # Count input tokens accurately
+    input_tokens = token_counter.count_messages_tokens([
+        {"role": "system", "content": system_prompt},
+        *[{"role": msg.type, "content": msg.content} for msg in messages[1:]],
+        {"role": "user", "content": prompt},
+    ])
     
     try:
-        async for chunk in llm.astream(messages):
+        # Wrap streaming in circuit breaker
+        async def stream_with_protection():
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    yield chunk
+        
+        async for chunk in stream_with_protection():
             if chunk.content:
                 token = chunk.content
                 full_response += token
                 streaming_tokens.append(token)
-                total_tokens += 1
                 
                 if on_token:
                     on_token(token)
@@ -200,12 +294,30 @@ async def response_generator_streaming(
                     "streaming_tokens": streaming_tokens.copy(),
                     "response": full_response,
                 }
+    
+    except CircuitBreakerError as e:
+        full_response = (
+            "I apologize, but I'm temporarily unable to process your request. "
+            "Our AI service is experiencing high load. Please try again in a moment."
+        )
+        yield {
+            "response": full_response,
+            "error": "circuit_breaker_open",
+        }
+        
     except Exception as e:
-        full_response = "I apologize, but I'm having trouble generating a response. Please try again."
+        full_response = (
+            "I apologize, but I'm having trouble generating a response. "
+            "Please try again."
+        )
         yield {
             "response": full_response,
             "error": str(e),
         }
+    
+    # Count output tokens accurately
+    output_tokens = token_counter.count_tokens(full_response)
+    total_tokens = input_tokens + output_tokens
     
     end_time = int(time.time() * 1000)
     

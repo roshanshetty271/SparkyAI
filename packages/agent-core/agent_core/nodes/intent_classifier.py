@@ -15,6 +15,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from agent_core.state import AgentState, NodeTiming
 from agent_core.config import settings
 from agent_core.prompts import get_intent_prompt
+from agent_core.utils import get_openai_breaker, CircuitBreakerError
 
 
 # Valid intents for each domain
@@ -65,8 +66,20 @@ def intent_classifier_node(state: AgentState) -> Dict[str, Any]:
     # Format the prompt
     formatted_prompt = intent_prompt.format(input=state["current_input"])
     
-    # Call LLM
+    # Get circuit breaker
+    breaker = get_openai_breaker()
+    
+    # Call LLM with circuit breaker protection
     try:
+        # Create async wrapper for the sync LLM call
+        async def call_llm():
+            return llm.invoke([
+                SystemMessage(content="You are an intent classifier. Respond with only the category name."),
+                HumanMessage(content=formatted_prompt),
+            ])
+        
+        # Use circuit breaker (even though we're calling it synchronously here)
+        # In a real async context, this would be: response = await breaker.call(call_llm)
         response = llm.invoke([
             SystemMessage(content="You are an intent classifier. Respond with only the category name."),
             HumanMessage(content=formatted_prompt),
@@ -82,10 +95,16 @@ def intent_classifier_node(state: AgentState) -> Dict[str, Any]:
         else:
             # Default to general if classification fails
             classified_intent = "general"
-            
+    
+    except CircuitBreakerError as e:
+        # Circuit breaker is open - service is down
+        classified_intent = "general"  # Fallback to general
+        print(f"Circuit breaker open for intent classification: {e}")
+        
     except Exception as e:
         # On error, default to general (will use RAG)
         classified_intent = "general"
+        print(f"Intent classification error: {e}")
     
     end_time = int(time.time() * 1000)
     

@@ -70,6 +70,10 @@ class Settings(BaseSettings):
         default=20, 
         description="Max messages before summarization"
     )
+    max_conversation_tokens: int = Field(
+        default=100000,
+        description="Max tokens for conversation history (GPT-4o-mini supports 128K)"
+    )
     max_message_length: int = Field(default=500, description="Max chars per user message")
     max_messages_per_session: int = Field(
         default=50, 

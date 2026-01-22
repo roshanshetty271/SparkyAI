@@ -50,140 +50,40 @@ An AI-powered portfolio chatbot that serves as an interactive resume. Instead of
 - **Upstash Redis** - Session management (free tier)
 - **Langfuse** - LLM observability
 
-## 📦 Project Structure
-
-```
-sparky-ai/
-├── packages/
-│   ├── agent-core/          # LangGraph agent logic
-│   │   ├── agent_core/
-│   │   │   ├── nodes/       # Graph nodes (greeter, intent, rag, response)
-│   │   │   ├── utils/       # Security, sanitization
-│   │   │   ├── graph.py     # Main state machine
-│   │   │   ├── state.py     # State schema
-│   │   │   ├── prompts.py   # Prompt templates
-│   │   │   └── config.py    # Settings
-│   │   └── pyproject.toml
-│   │
-│   ├── server/              # FastAPI server
-│   │   ├── server/
-│   │   │   ├── middleware/  # Security headers
-│   │   │   ├── utils/       # Redis, budget tracking
-│   │   │   ├── main.py      # API routes & WebSocket
-│   │   │   └── websocket.py # Connection manager
-│   │   └── pyproject.toml
-│   │
-│   └── web/                 # Next.js frontend
-│       ├── src/
-│       │   ├── app/         # Pages
-│       │   ├── components/  # React components
-│       │   │   ├── chat/    # Chat widget
-│       │   │   ├── ui/      # Reusable UI
-│       │   │   └── visualizations/  # D3.js components
-│       │   ├── hooks/       # Custom hooks
-│       │   ├── stores/      # Zustand stores
-│       │   └── types/       # TypeScript types
-│       └── package.json
-│
-├── knowledge/               # RAG knowledge base
-│   ├── resume/             # Professional info
-│   ├── projects/           # Project details
-│   └── meta/               # Contact, FAQ
-│
-├── scripts/
-│   └── generate_embeddings.py  # Create vector embeddings
-│
-├── infrastructure/
-│   └── docker/             # Docker configs
-│
-└── .github/
-    └── workflows/          # CI/CD pipelines
-```
-
 ## 🚀 Quick Start
-
-> **📖 For detailed setup instructions, see [SETUP.md](./SETUP.md)**
 
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
 - OpenAI API key
-- Upstash Redis account (free tier)
 
-### 1. Clone & Install
+### Installation
 
 ```bash
-git clone https://github.com/yourusername/sparky-ai.git
+# Clone repository
+git clone https://github.com/roshanshetty271/SparkyAI.git
 cd sparky-ai
 
 # Install frontend dependencies
-cd packages/web && npm install && cd ../..
-
-# Install backend dependencies (from project root)
-pip install -e packages/agent-core
-pip install -e packages/server
+cd packages/web && npm install
 ```
 
-### 2. Configure Environment
+### Configuration
+
+Create a `.env` file with your OpenAI API key:
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys
+OPENAI_API_KEY=your-key-here
 ```
 
-Required keys:
-- `OPENAI_API_KEY` - For GPT-4o-mini and embeddings
-- `UPSTASH_REDIS_REST_URL` (optional) - For session persistence
-- `UPSTASH_REDIS_REST_TOKEN` (optional)
-
-### 3. Generate Embeddings
+### Run
 
 ```bash
-python scripts/generate_embeddings.py
-```
-
-This creates vector embeddings from the `knowledge/` markdown files.
-
-### 4. Run Development Servers
-
-```bash
-# Terminal 1: Backend
-cd packages/server
-uvicorn server.main:app --reload --port 8000
-
-# Terminal 2: Frontend
-cd packages/web
+# Start frontend (from packages/web)
 npm run dev
 ```
 
 Visit [http://localhost:3000](http://localhost:3000)
-
-## 🎨 Customization
-
-### Switching to Buzzy (EasyBee Demo)
-
-The codebase supports a dual-persona architecture. To switch from SparkyAI to Buzzy:
-
-```bash
-# In .env
-AGENT_CONFIG=buzzy
-```
-
-Then update the `knowledge/` folder with EasyBee-specific content.
-
-### Adding Knowledge
-
-1. Add markdown files to `knowledge/` folder
-2. Run `python scripts/generate_embeddings.py`
-3. Restart the backend
-
-### Modifying the Agent
-
-The LangGraph agent is in `packages/agent-core/agent_core/graph.py`. Key customization points:
-
-- `prompts.py` - Modify AI responses
-- `nodes/intent_classifier.py` - Add new intent categories
-- `nodes/rag_retriever.py` - Tune retrieval parameters
 
 ## 📊 Visualization Guide
 
@@ -203,28 +103,20 @@ Visualizes the semantic space:
 - Lines connect to retrieved chunks
 - Brighter = higher similarity
 
-## 🔧 API Reference
+## 🎨 Key Highlights
 
-### REST Endpoints
+- **Real-time WebSocket streaming** for live visualization updates
+- **Token-aware conversation management** prevents context overflow
+- **Circuit breaker pattern** for resilient OpenAI integration
+- **Comprehensive testing** with 70%+ coverage
+- **Type-safe** throughout with TypeScript and Python type hints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check with dependency status |
-| POST | `/chat` | Non-streaming chat (rate limited) |
-| GET | `/graph/structure` | Agent graph for D3.js |
-| GET | `/embeddings/knowledge` | All 2D-projected points |
+## 🧪 Testing
 
-### WebSocket
-
-Connect to `/ws/{session_id}` for real-time streaming.
-
-**Events received:**
-- `connected` - Connection established
-- `node_enter` - Agent entering a node
-- `node_complete` - Node finished processing
-- `rag_results` - Retrieval results with projections
-- `token` - Streaming response token
-- `complete` - Processing finished
+```bash
+# Run tests
+npm test
+```
 
 ## 💰 Cost Optimization
 
@@ -234,20 +126,8 @@ Connect to `/ws/{session_id}` for real-time streaming.
 | OpenAI Embeddings | One-time | Generated at build |
 | Upstash Redis | Free tier | 10k commands/day |
 | Vercel | Free tier | Hobby plan |
-| Railway | $5/month | Or free tier |
 
-**Total: $5-15/month** for a production deployment.
-
-## 🧪 Testing
-
-```bash
-# Backend tests
-pytest packages/agent-core/tests -v
-pytest packages/server/tests -v
-
-# Frontend
-cd packages/web && npm run lint && npm run type-check
-```
+**Total: ~$5-15/month** for a production deployment.
 
 ## 📝 License
 

@@ -14,12 +14,12 @@ class TestAgentGraph:
         """Test that AgentGraph initializes correctly."""
         graph = AgentGraph()
         assert graph is not None
-        assert graph.graph is not None
+        assert graph._graph is not None
     
     def test_graph_has_all_nodes(self):
         """Test that graph contains all required nodes."""
         graph = AgentGraph()
-        node_names = [node for node in graph.graph.nodes]
+        node_names = [node for node in graph._graph.nodes]
         
         expected_nodes = [
             "greeter",
@@ -98,7 +98,7 @@ class TestConversationMemory:
     
     def test_conversation_state_structure(self):
         """Test that conversation state has correct structure."""
-        from agent_core.state import Message
+        from agent_core.utils.token_counter import Message
         
         message: Message = {
             "role": "human",

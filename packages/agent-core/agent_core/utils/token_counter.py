@@ -4,10 +4,15 @@ This module provides utilities to count tokens in messages and manage
 conversation history to stay within model context limits.
 """
 import tiktoken
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TypedDict
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from agent_core.state import Message
+
+
+class Message(TypedDict):
+    """Message format for conversation history."""
+    role: str
+    content: str
 
 
 class TokenCounter:

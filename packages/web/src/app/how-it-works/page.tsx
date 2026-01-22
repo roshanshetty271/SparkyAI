@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Sparkles, Play, RefreshCw } from 'lucide-react'
 import AgentGraph from '@/components/visualizations/AgentGraph'
@@ -10,7 +10,9 @@ import ChatWidget from '@/components/chat/ChatWidget'
 import { useAgentStore } from '@/stores/agentStore'
 
 export default function HowItWorksPage() {
-  const [activeTab, setActiveTab] = useState<'graph' | 'embeddings' | 'timeline'>('graph')
+  type TabId = 'graph' | 'embeddings' | 'timeline'
+
+  const [activeTab, setActiveTab] = useState<TabId>('graph')
   const [chatOpen, setChatOpen] = useState(false)
   const [demoRunning, setDemoRunning] = useState(false)
   
@@ -84,14 +86,14 @@ export default function HowItWorksPage() {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
-          {[
+          {([
             { id: 'graph', label: 'Agent Graph', desc: 'Node execution flow' },
             { id: 'embeddings', label: 'Embedding Space', desc: 'Semantic search' },
             { id: 'timeline', label: 'Trace Timeline', desc: 'Performance metrics' },
-          ].map((tab) => (
+          ] as Array<{ id: TabId; label: string; desc: string }>).map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-3 rounded-lg transition-all ${
                 activeTab === tab.id
                   ? 'bg-dark-card border border-accent-cyan/50 text-white'
@@ -242,7 +244,6 @@ export default function HowItWorksPage() {
       <ChatWidget 
         isOpen={chatOpen} 
         onToggle={() => setChatOpen(!chatOpen)} 
-        showVisualization={true}
       />
     </main>
   )

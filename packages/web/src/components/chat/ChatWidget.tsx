@@ -12,10 +12,9 @@ import ChatInput from './ChatInput'
 interface ChatWidgetProps {
   isOpen: boolean
   onToggle: () => void
-  showVisualization?: boolean
 }
 
-export default function ChatWidget({ isOpen, onToggle, showVisualization = false }: ChatWidgetProps) {
+export default function ChatWidget({ isOpen, onToggle }: ChatWidgetProps) {
   const [isMinimized, setIsMinimized] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   

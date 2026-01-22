@@ -9,7 +9,7 @@ export interface RetrievedChunk {
   content: string
   source: string
   similarity: number
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface QueryProjection {

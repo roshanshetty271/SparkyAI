@@ -19,9 +19,9 @@ interface GraphNode {
   fy?: number | null
 }
 
-interface GraphLink {
-  source: string | GraphNode
-  target: string | GraphNode
+type GraphLink = d3.SimulationLinkDatum<GraphNode> & {
+  source: GraphNode | string
+  target: GraphNode | string
   label?: string
 }
 
@@ -48,6 +48,14 @@ const NODE_COLORS: Record<NodeState, string> = {
   active: '#3b82f6',
   complete: '#10b981',
   error: '#ef4444',
+}
+
+const getNodePosition = (node: GraphNode | string) => {
+  if (typeof node === 'string') {
+    return { x: 0, y: 0 }
+  }
+
+  return { x: node.x ?? 0, y: node.y ?? 0 }
 }
 
 export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps) {
@@ -123,7 +131,7 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
     // Create links
     const linkGroup = g.append('g')
       .attr('class', 'links')
-      .selectAll('g')
+      .selectAll<SVGGElement, GraphLink>('g')
       .data(links)
       .join('g')
 
@@ -144,7 +152,7 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
     // Create nodes
     const nodeGroup = g.append('g')
       .attr('class', 'nodes')
-      .selectAll('g')
+      .selectAll<SVGGElement, GraphNode>('g')
       .data(nodes)
       .join('g')
       .attr('class', 'node')
@@ -169,7 +177,7 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
       .attr('r', 35)
       .attr('class', 'node-glow')
       .attr('fill', 'none')
-      .attr('stroke', d => NODE_COLORS[nodeStates[d.id] || 'pending'])
+      .attr('stroke', NODE_COLORS.pending)
       .attr('stroke-width', 2)
       .attr('opacity', 0.3)
 
@@ -178,7 +186,7 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
       .attr('r', 30)
       .attr('class', 'node-circle')
       .attr('fill', '#18181b')
-      .attr('stroke', d => NODE_COLORS[nodeStates[d.id] || 'pending'])
+      .attr('stroke', NODE_COLORS.pending)
       .attr('stroke-width', 3)
 
     // Node labels
@@ -188,7 +196,7 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
       .text(d => d.label)
 
     // Tooltip on hover
-    nodeGroup.on('mouseenter', function(event, d) {
+    nodeGroup.on('mouseenter', function() {
       d3.select(this).select('.node-glow')
         .transition()
         .duration(200)
@@ -205,19 +213,25 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
 
     // Update positions on tick
     simulation.on('tick', () => {
-      linkPaths.attr('d', (d: any) => {
-        const sourceX = d.source.x
-        const sourceY = d.source.y
-        const targetX = d.target.x
-        const targetY = d.target.y
-        return `M${sourceX},${sourceY}L${targetX},${targetY}`
+      linkPaths.attr('d', (d) => {
+        const source = getNodePosition(d.source)
+        const target = getNodePosition(d.target)
+        return `M${source.x},${source.y}L${target.x},${target.y}`
       })
 
-      linkGroup.selectAll('text')
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2)
+      linkGroup.selectAll<SVGTextElement, GraphLink>('text')
+        .attr('x', (d) => {
+          const source = getNodePosition(d.source)
+          const target = getNodePosition(d.target)
+          return (source.x + target.x) / 2
+        })
+        .attr('y', (d) => {
+          const source = getNodePosition(d.source)
+          const target = getNodePosition(d.target)
+          return (source.y + target.y) / 2
+        })
 
-      nodeGroup.attr('transform', (d: any) => `translate(${d.x},${d.y})`)
+      nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
     })
 
     // Zoom
@@ -241,19 +255,19 @@ export default function AgentGraph({ nodeStates, currentNode }: AgentGraphProps)
     const svg = d3.select(svgRef.current)
 
     // Update stroke colors
-    svg.selectAll('.node-circle')
+    svg.selectAll<SVGCircleElement, GraphNode>('.node-circle')
       .transition()
       .duration(300)
-      .attr('stroke', (d: any) => NODE_COLORS[nodeStates[d.id] || 'pending'])
+      .attr('stroke', (d) => NODE_COLORS[nodeStates[d.id] || 'pending'])
 
-    svg.selectAll('.node-glow')
+    svg.selectAll<SVGCircleElement, GraphNode>('.node-glow')
       .transition()
       .duration(300)
-      .attr('stroke', (d: any) => NODE_COLORS[nodeStates[d.id] || 'pending'])
+      .attr('stroke', (d) => NODE_COLORS[nodeStates[d.id] || 'pending'])
 
     // Pulse animation for active node
-    svg.selectAll('.node')
-      .classed('node-active', (d: any) => d.id === currentNode)
+    svg.selectAll<SVGGElement, GraphNode>('.node')
+      .classed('node-active', (d) => d.id === currentNode)
 
   }, [nodeStates, currentNode])
 

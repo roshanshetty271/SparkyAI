@@ -11,20 +11,32 @@ import { useEffect, useRef, useState } from "react";
  * @see https://developers.cloudflare.com/turnstile/
  */
 
+type TurnstileTheme = "light" | "dark" | "auto";
+type TurnstileSize = "normal" | "compact";
+
+interface TurnstileRenderOptions {
+  sitekey: string;
+  theme: TurnstileTheme;
+  size: TurnstileSize;
+  callback: (token: string) => void;
+  "error-callback": (error: string) => void;
+  "expired-callback": () => void;
+}
+
 interface TurnstileWidgetProps {
   siteKey?: string;
   onVerify: (token: string) => void;
   onError?: (error: string) => void;
   onExpire?: () => void;
-  theme?: "light" | "dark" | "auto";
-  size?: "normal" | "compact";
+  theme?: TurnstileTheme;
+  size?: TurnstileSize;
   className?: string;
 }
 
 declare global {
   interface Window {
     turnstile?: {
-      render: (container: HTMLElement, options: any) => string;
+      render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
       reset: (widgetId: string) => void;
       remove: (widgetId: string) => void;
       getResponse: (widgetId: string) => string;
@@ -119,7 +131,7 @@ export function TurnstileWidget({
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current);
-        } catch (e) {
+        } catch {
           // Ignore cleanup errors
         }
       }

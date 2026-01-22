@@ -56,7 +56,7 @@ const initialNodeStates: Record<string, NodeState> = {
   fallback_response: 'pending',
 }
 
-export const useAgentStore = create<AgentState>((set, get) => ({
+export const useAgentStore = create<AgentState>((set) => ({
   // Initial state
   sessionId: null,
   isConnected: false,

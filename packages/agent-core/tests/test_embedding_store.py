@@ -176,11 +176,11 @@ class TestEmbeddingStore:
         query = np.array([1.0, 0.0, 0.0])
         projection = store.project_query(query)
 
-        assert projection.x is not None
-        assert projection.y is not None
+        assert projection["x"] is not None
+        assert projection["y"] is not None
         # Should be close to chunk 0's projection (0.0, 0.0)
-        assert abs(projection.x) < 0.5
-        assert abs(projection.y) < 0.5
+        assert abs(projection["x"]) < 0.5
+        assert abs(projection["y"]) < 0.5
 
     def test_project_query_between_chunks(self, temp_embeddings_dir):
         """Test query projection between multiple chunks."""
@@ -195,8 +195,8 @@ class TestEmbeddingStore:
         projection = store.project_query(query)
 
         # Should be close to chunk 3's projection (0.5, 0.5)
-        assert 0.3 < projection.x < 0.7
-        assert 0.3 < projection.y < 0.7
+        assert 0.3 < projection["x"] < 0.7
+        assert 0.3 < projection["y"] < 0.7
 
     def test_project_query_empty_store(self):
         """Test query projection on empty store."""
@@ -208,8 +208,8 @@ class TestEmbeddingStore:
         query = np.array([1.0, 0.0, 0.0])
         projection = store.project_query(query)
 
-        assert projection.x == 0.0
-        assert projection.y == 0.0
+        assert projection["x"] == 0.0
+        assert projection["y"] == 0.0
 
     def test_get_all_points_for_visualization(self, temp_embeddings_dir):
         """Test getting all points for frontend visualization."""

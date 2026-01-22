@@ -16,35 +16,35 @@ class TestConnectionManager:
         """Test that ConnectionManager initializes correctly."""
         manager = ConnectionManager()
         assert manager is not None
-        assert len(manager.active_connections) == 0
+        assert manager.active_connections == 0  # active_connections returns int (count)
 
     @pytest.mark.asyncio
     async def test_connect(self):
         """Test adding a connection."""
         manager = ConnectionManager()
-        mock_websocket = Mock()
+        mock_websocket = AsyncMock()
 
-        await manager.connect("test-session", mock_websocket)
+        await manager.connect(mock_websocket, "test-session")
 
-        assert "test-session" in manager.active_connections
-        assert manager.active_connections["test-session"] == mock_websocket
+        assert "test-session" in manager._connections
+        assert manager._connections["test-session"] == mock_websocket
 
     def test_disconnect(self):
         """Test removing a connection."""
         manager = ConnectionManager()
         mock_websocket = Mock()
-        manager.active_connections["test-session"] = mock_websocket
+        manager._connections["test-session"] = mock_websocket
 
         manager.disconnect("test-session")
 
-        assert "test-session" not in manager.active_connections
+        assert "test-session" not in manager._connections
 
     @pytest.mark.asyncio
     async def test_send_event(self):
         """Test sending an event to a connection."""
         manager = ConnectionManager()
         mock_websocket = AsyncMock()
-        manager.active_connections["test-session"] = mock_websocket
+        manager._connections["test-session"] = mock_websocket
 
         await manager.send_event(
             "test-session",
@@ -52,22 +52,24 @@ class TestConnectionManager:
             {"data": "value"}
         )
 
-        mock_websocket.send_json.assert_called_once()
-        call_args = mock_websocket.send_json.call_args[0][0]
+        mock_websocket.send_text.assert_called_once()
+        import json
+        call_args = json.loads(mock_websocket.send_text.call_args[0][0])
         assert call_args["event"] == "test_event"
-        assert call_args["data"]["data"] == "value"
+        assert call_args["payload"]["data"] == "value"
 
     @pytest.mark.asyncio
     async def test_send_event_to_nonexistent_session(self):
         """Test sending event to non-existent session doesn't crash."""
         manager = ConnectionManager()
 
-        # Should not raise an exception
-        await manager.send_event(
+        # Should not raise an exception, returns False
+        result = await manager.send_event(
             "nonexistent-session",
             "test_event",
             {"data": "value"}
         )
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_broadcast(self):
@@ -76,13 +78,13 @@ class TestConnectionManager:
         mock_ws1 = AsyncMock()
         mock_ws2 = AsyncMock()
 
-        manager.active_connections["session1"] = mock_ws1
-        manager.active_connections["session2"] = mock_ws2
+        manager._connections["session1"] = mock_ws1
+        manager._connections["session2"] = mock_ws2
 
         await manager.broadcast("test_event", {"message": "hello"})
 
-        assert mock_ws1.send_json.called
-        assert mock_ws2.send_json.called
+        assert mock_ws1.send_text.called
+        assert mock_ws2.send_text.called
 
 
 class TestWebSocketEndpoint:
@@ -119,17 +121,17 @@ class TestWebSocketWithMocks:
         mock_ws = AsyncMock()
         session_id = "test-123"
 
-        # Connect
-        await manager.connect(session_id, mock_ws)
-        assert session_id in manager.active_connections
+        # Connect (note: connect also sends a "connected" event)
+        await manager.connect(mock_ws, session_id)
+        assert session_id in manager._connections
 
         # Send event
-        await manager.send_event(session_id, "connected", {})
-        assert mock_ws.send_json.called
+        await manager.send_event(session_id, "test_event", {})
+        assert mock_ws.send_text.called
 
         # Disconnect
         manager.disconnect(session_id)
-        assert session_id not in manager.active_connections
+        assert session_id not in manager._connections
 
     @pytest.mark.asyncio
     async def test_multiple_connections(self):
@@ -141,14 +143,14 @@ class TestWebSocketWithMocks:
 
         # Connect all
         for session, ws in zip(sessions, websockets):
-            await manager.connect(session, ws)
+            await manager.connect(ws, session)
 
-        assert len(manager.active_connections) == 3
+        assert manager.active_connections == 3  # active_connections returns count
 
         # Disconnect one
         manager.disconnect("session2")
-        assert len(manager.active_connections) == 2
-        assert "session2" not in manager.active_connections
+        assert manager.active_connections == 2
+        assert "session2" not in manager._connections
 
     @pytest.mark.asyncio
     async def test_event_types(self):
@@ -157,11 +159,13 @@ class TestWebSocketWithMocks:
         mock_ws = AsyncMock()
         session_id = "test"
 
-        await manager.connect(session_id, mock_ws)
+        await manager.connect(mock_ws, session_id)
+
+        # Reset mock to clear the "connected" event sent during connect
+        mock_ws.reset_mock()
 
         # Test different event types
         events = [
-            ("connected", {"session_id": session_id}),
             ("node_enter", {"node": "greeter"}),
             ("token", {"token": "Hello"}),
             ("complete", {"response": "Done"}),
@@ -170,7 +174,7 @@ class TestWebSocketWithMocks:
         for event_type, data in events:
             await manager.send_event(session_id, event_type, data)
 
-        assert mock_ws.send_json.call_count == len(events)
+        assert mock_ws.send_text.call_count == len(events)
 
 
 class TestWebSocketErrorHandling:
@@ -181,12 +185,13 @@ class TestWebSocketErrorHandling:
         """Test sending to a closed connection."""
         manager = ConnectionManager()
         mock_ws = AsyncMock()
-        mock_ws.send_json.side_effect = RuntimeError("Connection closed")
+        mock_ws.send_text.side_effect = RuntimeError("Connection closed")
 
-        manager.active_connections["test"] = mock_ws
+        manager._connections["test"] = mock_ws
 
-        # Should not raise exception
-        await manager.send_event("test", "test", {})
+        # Should not raise exception, returns False and disconnects
+        result = await manager.send_event("test", "test", {})
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_broadcast_with_failed_connection(self):
@@ -195,15 +200,15 @@ class TestWebSocketErrorHandling:
 
         mock_ws1 = AsyncMock()
         mock_ws2 = AsyncMock()
-        mock_ws2.send_json.side_effect = RuntimeError("Connection error")
+        mock_ws2.send_text.side_effect = RuntimeError("Connection error")
         mock_ws3 = AsyncMock()
 
-        manager.active_connections["s1"] = mock_ws1
-        manager.active_connections["s2"] = mock_ws2
-        manager.active_connections["s3"] = mock_ws3
+        manager._connections["s1"] = mock_ws1
+        manager._connections["s2"] = mock_ws2
+        manager._connections["s3"] = mock_ws3
 
         # Should continue broadcasting to other connections
         await manager.broadcast("test", {})
 
-        assert mock_ws1.send_json.called
-        assert mock_ws3.send_json.called
+        assert mock_ws1.send_text.called
+        assert mock_ws3.send_text.called

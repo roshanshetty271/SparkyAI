@@ -80,25 +80,40 @@ class TestInputSanitization:
 class TestBudgetProtection:
     """Test budget tracking and protection."""
 
-    @patch('server.main.budget_tracker')
-    def test_budget_check_allows_request(self, mock_budget):
+    def test_budget_check_allows_request(self):
         """Test that requests proceed when budget is available."""
-        mock_budget.can_proceed.return_value = (True, None)
-
+        # Health endpoint doesn't check budget, so it should always work
         response = client.get("/health")
         assert response.status_code == 200
 
-    @patch('server.main.budget_tracker')
-    @patch('server.main.agent_graph')
-    def test_budget_check_blocks_request(self, mock_agent, mock_budget):
+    def test_budget_check_blocks_request(self):
         """Test that requests are blocked when budget is exceeded."""
-        mock_budget.can_proceed.return_value = (False, "Daily budget exceeded")
-
-        response = client.post(
-            "/chat",
-            json={"message": "Hello", "session_id": "test"}
-        )
-        assert response.status_code == 429  # Too Many Requests
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from server.main import app
+        from server.utils.redis import get_redis
+        
+        # Create a mock Redis client
+        mock_redis = MagicMock()
+        
+        # Override the dependency
+        async def mock_get_redis_override():
+            return mock_redis
+        
+        app.dependency_overrides[get_redis] = mock_get_redis_override
+        
+        try:
+            # Mock BudgetTracker.can_spend to return False (budget exceeded)
+            with patch('server.utils.budget.BudgetTracker.can_spend', new_callable=AsyncMock) as mock_can_spend:
+                mock_can_spend.return_value = False
+                
+                response = client.post(
+                    "/chat",
+                    json={"message": "Hello world test", "session_id": "test-session-12345"}
+                )
+                assert response.status_code == 429  # Too Many Requests
+        finally:
+            # Clean up dependency override
+            app.dependency_overrides.clear()
 
 
 class TestRateLimiting:

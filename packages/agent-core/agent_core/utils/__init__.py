@@ -55,7 +55,7 @@ from agent_core.utils.response_evaluator import (
 INJECTION_PATTERNS = [
     # Direct instruction override attempts
     r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)",
-    r"disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)",
+    r"disregard\s+(all\s+)?(previous|prior|above)?\s*(your|the)?\s*(system\s+)?(instructions?|prompts?)",
     r"forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)",
 
     # System prompt extraction

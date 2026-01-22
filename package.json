@@ -1,0 +1,29 @@
+{
+  "name": "sparky-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SparkyAI - Interactive AI Portfolio with Real-Time Visualization",
+  "author": "Roshan Shetty",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "npm run dev --workspace=packages/web",
+    "dev:backend": "cd packages/server && uvicorn server.main:app --reload --port 8000",
+    "build": "npm run build --workspace=packages/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:backend": "cd packages/agent-core && pytest -v",
+    "generate:embeddings": "python scripts/generate_embeddings.py",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

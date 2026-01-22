@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  --color-bg: #0a0a0b;
+  --color-card: #111113;
+  --color-border: #1f1f23;
+  --color-text: #fafafa;
+  --color-text-muted: #a1a1aa;
+  --color-accent-cyan: #22d3ee;
+  --color-accent-purple: #a855f7;
+  --color-accent-green: #10b981;
+  --color-accent-blue: #3b82f6;
+}
+
+body {
+  @apply bg-dark-bg text-white antialiased;
+  font-feature-settings: 'rlig' 1, 'calt' 1;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-dark-bg;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-dark-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-600;
+}
+
+/* Focus styles */
+*:focus-visible {
+  @apply outline-none ring-2 ring-accent-cyan ring-offset-2 ring-offset-dark-bg;
+}
+
+/* D3.js visualization styles */
+.viz-container {
+  @apply w-full h-full;
+}
+
+.viz-container svg {
+  @apply w-full h-full;
+}
+
+/* Node styles */
+.node-circle {
+  @apply transition-all duration-200;
+  cursor: pointer;
+}
+
+.node-circle:hover {
+  filter: brightness(1.2);
+}
+
+.node-label {
+  @apply fill-white text-xs font-medium pointer-events-none;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+/* Edge styles */
+.edge-line {
+  @apply stroke-dark-border;
+  stroke-width: 2;
+  fill: none;
+}
+
+.edge-line.active {
+  @apply stroke-accent-blue;
+  stroke-width: 3;
+}
+
+/* Pulse animation for active nodes */
+@keyframes node-pulse {
+  0%, 100% {
+    r: 30;
+    opacity: 1;
+  }
+  50% {
+    r: 35;
+    opacity: 0.8;
+  }
+}
+
+.node-active {
+  animation: node-pulse 1s ease-in-out infinite;
+}
+
+/* Glow effect for connections */
+.glow-line {
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+/* Chat widget styles */
+.chat-bubble {
+  @apply fixed bottom-6 right-6 z-50;
+}
+
+.chat-window {
+  @apply fixed bottom-24 right-6 z-50 w-96 h-[500px] 
+         bg-dark-card border border-dark-border rounded-2xl 
+         shadow-2xl overflow-hidden flex flex-col;
+}
+
+/* Message styles */
+.message {
+  @apply p-3 rounded-xl max-w-[85%] animate-slide-up;
+}
+
+.message-user {
+  @apply bg-accent-blue text-white ml-auto;
+}
+
+.message-assistant {
+  @apply bg-dark-border text-white;
+}
+
+/* Typing indicator */
+.typing-indicator {
+  @apply flex space-x-1 p-3;
+}
+
+.typing-dot {
+  @apply w-2 h-2 bg-zinc-500 rounded-full;
+  animation: typing 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Embedding space explorer */
+.embedding-point {
+  @apply transition-all duration-300;
+  cursor: pointer;
+}
+
+.embedding-point:hover {
+  transform: scale(1.5);
+}
+
+.embedding-connection {
+  @apply transition-all duration-500;
+  stroke-linecap: round;
+}
+
+/* Timeline styles */
+.timeline-bar {
+  @apply h-8 rounded transition-all duration-300;
+}
+
+.timeline-label {
+  @apply text-xs font-mono text-zinc-400;
+}

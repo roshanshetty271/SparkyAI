@@ -1,0 +1,244 @@
+"""
+Response Generator Node
+=======================
+
+Generates the final response using LLM with context from RAG.
+Supports streaming for real-time token delivery.
+"""
+
+import time
+from typing import Dict, Any, AsyncIterator, Optional, Callable
+
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+from agent_core.state import AgentState, NodeTiming
+from agent_core.config import settings
+from agent_core.prompts import (
+    get_system_prompt,
+    get_response_prompt,
+    get_greeting_prompt,
+)
+
+
+def response_generator_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Generate response using LLM (non-streaming version).
+    
+    For streaming, use response_generator_streaming instead.
+    
+    Args:
+        state: Current agent state
+        
+    Returns:
+        Partial state update with generated response
+    """
+    start_time = int(time.time() * 1000)
+    
+    # Update node states
+    node_states = state["node_states"].copy()
+    node_states["response_generator"] = "active"
+    
+    domain = state["domain"]
+    intent = state.get("user_intent", "general")
+    
+    # Initialize LLM
+    llm = ChatOpenAI(
+        model=settings.openai_model,
+        temperature=0.7,
+        max_tokens=500,
+        api_key=settings.openai_api_key,
+    )
+    
+    # Build messages
+    messages = [
+        SystemMessage(content=get_system_prompt(domain))
+    ]
+    
+    # Add conversation history (last N messages)
+    history = state.get("messages", [])[-10:]  # Last 10 messages
+    messages.extend(history)
+    
+    # Build the user prompt based on intent
+    if intent == "greeting":
+        prompt = get_greeting_prompt(domain).format(input=state["current_input"])
+    else:
+        context = state.get("retrieved_context") or "No specific context available."
+        prompt = get_response_prompt(domain).format(
+            context=context,
+            input=state["current_input"],
+        )
+    
+    messages.append(HumanMessage(content=prompt))
+    
+    # Generate response
+    try:
+        response = llm.invoke(messages)
+        response_text = response.content
+        
+        # Estimate tokens (rough approximation)
+        total_tokens = len(prompt.split()) + len(response_text.split())
+        
+    except Exception as e:
+        response_text = "I apologize, but I'm having trouble generating a response right now. Please try again in a moment."
+        total_tokens = 0
+    
+    end_time = int(time.time() * 1000)
+    
+    # Mark node complete
+    node_states["response_generator"] = "complete"
+    
+    # Record timing
+    timing = NodeTiming(
+        node="response_generator",
+        start_ms=start_time,
+        end_ms=end_time,
+        duration_ms=end_time - start_time,
+    )
+    
+    trace_metadata = state["trace_metadata"].copy() if state["trace_metadata"] else {}
+    existing_timings = trace_metadata.get("node_timings", [])
+    trace_metadata["node_timings"] = existing_timings + [timing]
+    trace_metadata["total_tokens"] = trace_metadata.get("total_tokens", 0) + total_tokens
+    
+    # Estimate cost (GPT-4o-mini pricing: ~$0.15/1M input, $0.60/1M output)
+    estimated_cost = (total_tokens / 1_000_000) * 0.40  # Rough average
+    trace_metadata["estimated_cost_usd"] = trace_metadata.get("estimated_cost_usd", 0) + estimated_cost
+    
+    # Add AI message to history
+    new_messages = list(state.get("messages", []))
+    new_messages.append(HumanMessage(content=state["current_input"]))
+    new_messages.append(AIMessage(content=response_text))
+    
+    return {
+        "response": response_text,
+        "response_complete": True,
+        "messages": new_messages,
+        "current_node": "end",
+        "node_states": node_states,
+        "trace_metadata": trace_metadata,
+    }
+
+
+async def response_generator_streaming(
+    state: AgentState,
+    on_token: Optional[Callable[[str], None]] = None,
+) -> AsyncIterator[Dict[str, Any]]:
+    """
+    Generate response with streaming support.
+    
+    Yields partial state updates as tokens are generated.
+    
+    Args:
+        state: Current agent state
+        on_token: Optional callback for each token
+        
+    Yields:
+        Partial state updates with streaming tokens
+    """
+    start_time = int(time.time() * 1000)
+    
+    # Update node states
+    node_states = state["node_states"].copy()
+    node_states["response_generator"] = "active"
+    
+    yield {
+        "current_node": "response_generator",
+        "node_states": node_states,
+    }
+    
+    domain = state["domain"]
+    intent = state.get("user_intent", "general")
+    
+    # Initialize streaming LLM
+    llm = ChatOpenAI(
+        model=settings.openai_model,
+        temperature=0.7,
+        max_tokens=500,
+        api_key=settings.openai_api_key,
+        streaming=True,
+    )
+    
+    # Build messages
+    messages = [
+        SystemMessage(content=get_system_prompt(domain))
+    ]
+    
+    # Add conversation history
+    history = state.get("messages", [])[-10:]
+    messages.extend(history)
+    
+    # Build the user prompt
+    if intent == "greeting":
+        prompt = get_greeting_prompt(domain).format(input=state["current_input"])
+    else:
+        context = state.get("retrieved_context") or "No specific context available."
+        prompt = get_response_prompt(domain).format(
+            context=context,
+            input=state["current_input"],
+        )
+    
+    messages.append(HumanMessage(content=prompt))
+    
+    # Stream response
+    full_response = ""
+    streaming_tokens = []
+    total_tokens = len(prompt.split())  # Input tokens
+    
+    try:
+        async for chunk in llm.astream(messages):
+            if chunk.content:
+                token = chunk.content
+                full_response += token
+                streaming_tokens.append(token)
+                total_tokens += 1
+                
+                if on_token:
+                    on_token(token)
+                
+                yield {
+                    "streaming_tokens": streaming_tokens.copy(),
+                    "response": full_response,
+                }
+    except Exception as e:
+        full_response = "I apologize, but I'm having trouble generating a response. Please try again."
+        yield {
+            "response": full_response,
+            "error": str(e),
+        }
+    
+    end_time = int(time.time() * 1000)
+    
+    # Mark complete
+    node_states["response_generator"] = "complete"
+    
+    # Record timing
+    timing = NodeTiming(
+        node="response_generator",
+        start_ms=start_time,
+        end_ms=end_time,
+        duration_ms=end_time - start_time,
+    )
+    
+    trace_metadata = state["trace_metadata"].copy() if state["trace_metadata"] else {}
+    existing_timings = trace_metadata.get("node_timings", [])
+    trace_metadata["node_timings"] = existing_timings + [timing]
+    trace_metadata["total_tokens"] = trace_metadata.get("total_tokens", 0) + total_tokens
+    
+    # Estimate cost
+    estimated_cost = (total_tokens / 1_000_000) * 0.40
+    trace_metadata["estimated_cost_usd"] = trace_metadata.get("estimated_cost_usd", 0) + estimated_cost
+    
+    # Add to message history
+    new_messages = list(state.get("messages", []))
+    new_messages.append(HumanMessage(content=state["current_input"]))
+    new_messages.append(AIMessage(content=full_response))
+    
+    yield {
+        "response": full_response,
+        "response_complete": True,
+        "messages": new_messages,
+        "current_node": "end",
+        "node_states": node_states,
+        "trace_metadata": trace_metadata,
+    }

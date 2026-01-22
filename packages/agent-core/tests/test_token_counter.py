@@ -1,15 +1,16 @@
 """Tests for token counting and conversation memory management."""
 import pytest
+
 from agent_core.utils.token_counter import (
-    TokenCounter,
     ConversationWindowManager,
+    TokenCounter,
     format_conversation_for_llm,
 )
 
 
 class TestTokenCounter:
     """Test token counting functionality."""
-    
+
     def test_count_tokens_basic(self):
         """Test basic token counting."""
         counter = TokenCounter()
@@ -17,13 +18,13 @@ class TestTokenCounter:
         tokens = counter.count_tokens(text)
         assert tokens > 0
         assert isinstance(tokens, int)
-    
+
     def test_count_tokens_empty(self):
         """Test counting tokens in empty string."""
         counter = TokenCounter()
         tokens = counter.count_tokens("")
         assert tokens == 0
-    
+
     def test_count_message_tokens(self):
         """Test counting tokens in a message dict."""
         counter = TokenCounter()
@@ -31,7 +32,7 @@ class TestTokenCounter:
         tokens = counter.count_message_tokens(message)
         # Should include overhead (3) + role tokens + content tokens
         assert tokens > 3
-    
+
     def test_count_messages_tokens(self):
         """Test counting tokens in multiple messages."""
         counter = TokenCounter()
@@ -42,7 +43,7 @@ class TestTokenCounter:
         ]
         tokens = counter.count_messages_tokens(messages)
         assert tokens > 0
-    
+
     def test_count_conversation_tokens(self):
         """Test counting tokens in conversation format."""
         counter = TokenCounter()
@@ -56,13 +57,13 @@ class TestTokenCounter:
 
 class TestConversationWindowManager:
     """Test conversation window management."""
-    
+
     def test_initialization(self):
         """Test manager initialization."""
         manager = ConversationWindowManager(max_tokens=1000)
         assert manager.max_tokens == 1000
         assert manager.min_messages_to_keep == 4
-    
+
     def test_no_truncation_needed(self):
         """Test that short conversations are not truncated."""
         manager = ConversationWindowManager(max_tokens=100000)
@@ -72,7 +73,7 @@ class TestConversationWindowManager:
         ]
         result = manager.truncate_conversation(conversation)
         assert len(result) == len(conversation)
-    
+
     def test_truncation_with_small_limit(self):
         """Test that long conversations are truncated."""
         manager = ConversationWindowManager(
@@ -92,7 +93,7 @@ class TestConversationWindowManager:
         assert len(result) >= manager.min_messages_to_keep
         # Should have removed some messages
         assert len(result) <= len(conversation)
-    
+
     def test_min_messages_preserved(self):
         """Test that minimum messages are always kept."""
         manager = ConversationWindowManager(
@@ -108,7 +109,7 @@ class TestConversationWindowManager:
         result = manager.truncate_conversation(conversation)
         # Should keep at least min_messages
         assert len(result) >= min(manager.min_messages_to_keep, len(conversation))
-    
+
     def test_should_summarize_false_for_short(self):
         """Test that short conversations don't need summarization."""
         manager = ConversationWindowManager(max_tokens=100000)
@@ -117,7 +118,7 @@ class TestConversationWindowManager:
             {"role": "ai", "content": "Hello"},
         ]
         assert manager.should_summarize(conversation) is False
-    
+
     def test_should_summarize_true_for_long(self):
         """Test that long conversations need summarization."""
         manager = ConversationWindowManager(max_tokens=100)
@@ -131,7 +132,7 @@ class TestConversationWindowManager:
 
 class TestFormatConversationForLLM:
     """Test conversation formatting utilities."""
-    
+
     def test_format_with_system_prompt(self):
         """Test formatting with system prompt."""
         conversation = [
@@ -145,7 +146,7 @@ class TestFormatConversationForLLM:
         assert len(result) == 3  # system + 2 messages
         assert result[0]["role"] == "system"
         assert "helpful" in result[0]["content"].lower()
-    
+
     def test_format_with_rag_context(self):
         """Test formatting with RAG context."""
         conversation = [
@@ -157,7 +158,7 @@ class TestFormatConversationForLLM:
             rag_context="User is a software engineer.",
         )
         assert "software engineer" in result[0]["content"].lower()
-    
+
     def test_format_without_system_prompt(self):
         """Test formatting without system prompt."""
         conversation = [
@@ -173,7 +174,7 @@ class TestFormatConversationForLLM:
 @pytest.mark.skip(reason="Requires OpenAI API key")
 class TestConversationSummarization:
     """Test conversation summarization (requires API)."""
-    
+
     @pytest.mark.asyncio
     async def test_summarize_conversation(self):
         """Test conversation summarization."""
@@ -187,14 +188,14 @@ class TestConversationSummarization:
             {"role": "human", "content": "Is it easy to learn?"},
             {"role": "ai", "content": "Yes, it's known for being beginner-friendly."},
         ]
-        
+
         api_key = os.getenv("OPENAI_API_KEY", "test-key")
         result = await manager.summarize_conversation(
             conversation,
             api_key,
             keep_recent_messages=2,
         )
-        
+
         # Should have summary + recent messages
         assert len(result) < len(conversation)
         # First message should be summary

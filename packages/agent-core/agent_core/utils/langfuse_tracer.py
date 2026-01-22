@@ -5,15 +5,13 @@ observability of the agent workflow using Langfuse.
 """
 
 import time
-import functools
-from typing import Optional, Dict, Any, Callable, TypeVar, ParamSpec
-from contextlib import contextmanager, asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any, Dict, Optional, ParamSpec, TypeVar
+
 from langfuse import Langfuse
-from langfuse.decorators import langfuse_context, observe
 from langfuse.callback import CallbackHandler
 
 from agent_core.config import settings
-
 
 # Type variables for generic decorators
 P = ParamSpec('P')
@@ -22,12 +20,12 @@ T = TypeVar('T')
 
 class LangfuseTracer:
     """Centralized Langfuse tracing for the SparkyAI agent."""
-    
+
     def __init__(self):
         """Initialize Langfuse client if configured."""
         self._client: Optional[Langfuse] = None
         self._enabled = settings.langfuse_enabled
-        
+
         if self._enabled:
             try:
                 self._client = Langfuse(
@@ -42,17 +40,17 @@ class LangfuseTracer:
                 self._client = None
         else:
             print("ℹ️ Langfuse tracing disabled (no API keys configured)")
-    
+
     @property
     def enabled(self) -> bool:
         """Check if Langfuse is enabled and configured."""
         return self._enabled and self._client is not None
-    
+
     @property
     def client(self) -> Optional[Langfuse]:
         """Get the Langfuse client instance."""
         return self._client
-    
+
     def get_callback_handler(
         self,
         trace_id: Optional[str] = None,
@@ -78,7 +76,7 @@ class LangfuseTracer:
         """
         if not self.enabled:
             return None
-        
+
         try:
             return CallbackHandler(
                 public_key=settings.langfuse_public_key,
@@ -93,7 +91,7 @@ class LangfuseTracer:
         except Exception as e:
             print(f"⚠️ Failed to create Langfuse callback handler: {e}")
             return None
-    
+
     @contextmanager
     def trace_node(
         self,
@@ -119,10 +117,10 @@ class LangfuseTracer:
         if not self.enabled:
             yield None
             return
-        
+
         start_time = time.time()
         span = None
-        
+
         try:
             # Create a span for this node
             span = self._client.span(
@@ -152,7 +150,7 @@ class LangfuseTracer:
                         **(metadata or {}),
                     },
                 )
-    
+
     @asynccontextmanager
     async def trace_node_async(
         self,
@@ -178,10 +176,10 @@ class LangfuseTracer:
         if not self.enabled:
             yield None
             return
-        
+
         start_time = time.time()
         span = None
-        
+
         try:
             # Create a span for this node
             span = self._client.span(
@@ -211,7 +209,7 @@ class LangfuseTracer:
                         **(metadata or {}),
                     },
                 )
-    
+
     def trace_rag_retrieval(
         self,
         trace_id: str,
@@ -232,7 +230,7 @@ class LangfuseTracer:
         """
         if not self.enabled:
             return
-        
+
         try:
             self._client.span(
                 name="rag_retrieval",
@@ -253,7 +251,7 @@ class LangfuseTracer:
             )
         except Exception as e:
             print(f"⚠️ Failed to log RAG retrieval to Langfuse: {e}")
-    
+
     def trace_llm_call(
         self,
         trace_id: str,
@@ -280,7 +278,7 @@ class LangfuseTracer:
         """
         if not self.enabled:
             return
-        
+
         try:
             self._client.generation(
                 name=f"{node_name}_llm",
@@ -299,7 +297,7 @@ class LangfuseTracer:
             )
         except Exception as e:
             print(f"⚠️ Failed to log LLM call to Langfuse: {e}")
-    
+
     def create_trace(
         self,
         trace_id: str,
@@ -318,7 +316,7 @@ class LangfuseTracer:
         """
         if not self.enabled:
             return
-        
+
         try:
             self._client.trace(
                 id=trace_id,
@@ -328,7 +326,7 @@ class LangfuseTracer:
             )
         except Exception as e:
             print(f"⚠️ Failed to create Langfuse trace: {e}")
-    
+
     def update_trace(
         self,
         trace_id: str,
@@ -347,23 +345,23 @@ class LangfuseTracer:
         """
         if not self.enabled:
             return
-        
+
         try:
             trace = self._client.trace(id=trace_id)
             update_data = {}
-            
+
             if output is not None:
                 update_data["output"] = output
             if metadata is not None:
                 update_data["metadata"] = metadata
             if tags is not None:
                 update_data["tags"] = tags
-            
+
             if update_data:
                 trace.update(**update_data)
         except Exception as e:
             print(f"⚠️ Failed to update Langfuse trace: {e}")
-    
+
     def flush(self):
         """Flush all pending traces to Langfuse."""
         if self.enabled and self._client:

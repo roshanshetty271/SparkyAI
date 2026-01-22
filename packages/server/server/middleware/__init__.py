@@ -23,23 +23,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - Content-Security-Policy: Prevents XSS and data injection attacks
     - Strict-Transport-Security: Enforces HTTPS (production only)
     """
-    
+
     async def dispatch(self, request: Request, call_next) -> Response:
         """Process request and add security headers to response."""
         response = await call_next(request)
-        
+
         # Prevent MIME-type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
-        
+
         # Prevent clickjacking
         response.headers["X-Frame-Options"] = "DENY"
-        
+
         # Enable XSS filter (legacy, but still useful)
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        
+
         # Control referrer information
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        
+
         # Restrict browser features
         response.headers["Permissions-Policy"] = (
             "accelerometer=(), "
@@ -51,7 +51,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "payment=(), "
             "usb=()"
         )
-        
+
         # Content Security Policy - prevents XSS and injection attacks
         # This is a production-ready CSP that allows frontend to load necessary resources
         response.headers["Content-Security-Policy"] = (
@@ -66,12 +66,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "form-action 'self'; "  # Only allow form submissions to same origin
             "upgrade-insecure-requests; "  # Upgrade HTTP to HTTPS automatically
         )
-        
+
         # Strict Transport Security (HSTS) - enforce HTTPS
         # Note: Only add in production with HTTPS enabled
         # Uncomment when deploying with HTTPS:
         # response.headers["Strict-Transport-Security"] = (
         #     "max-age=31536000; includeSubDomains; preload"
         # )
-        
+
         return response

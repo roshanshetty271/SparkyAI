@@ -3,7 +3,8 @@ Agent State Schema for LangGraph.
 Defines the complete state that flows through the agent graph.
 """
 
-from typing import TypedDict, List, Optional, Dict, Any, Literal
+from typing import Any, Dict, List, Literal, Optional, TypedDict
+
 from langchain_core.messages import BaseMessage
 
 
@@ -51,86 +52,86 @@ class AgentState(TypedDict):
     - Response generation
     - Observability metadata
     """
-    
+
     # ============================================
     # Conversation State
     # ============================================
-    
+
     # Full message history (sliding window, max 20 recent + summary of older)
     messages: List[BaseMessage]
-    
+
     # Summary of older messages (when history exceeds max)
     conversation_summary: Optional[str]
-    
+
     # The current user input being processed
     current_input: str
-    
+
     # ============================================
     # Processing State (for visualization)
     # ============================================
-    
+
     # Which node is currently executing
     current_node: str
-    
+
     # Status of each node: pending | active | complete | error
     node_states: Dict[str, Literal["pending", "active", "complete", "error"]]
-    
+
     # Classified user intent
     user_intent: Optional[Literal[
         "greeting",
         "skill_question",
-        "project_inquiry", 
+        "project_inquiry",
         "experience_question",
         "contact_request",
         "general",
         "off_topic"
     ]]
-    
+
     # ============================================
     # RAG State
     # ============================================
-    
+
     # Retrieved chunks with metadata
     retrieved_chunks: List[RetrievedChunk]
-    
+
     # Formatted context string for the LLM
     retrieved_context: Optional[str]
-    
+
     # Highest similarity score from retrieval
     retrieval_confidence: float
-    
+
     # All similarity scores (for embedding explorer visualization)
     retrieval_scores: List[float]
-    
+
     # IDs of retrieved chunks (for embedding explorer)
     retrieved_chunk_ids: List[str]
-    
+
     # 2D projection of query for embedding explorer
     query_projection: Optional[QueryProjection]
-    
+
     # ============================================
     # Response State
     # ============================================
-    
+
     # Final response text
     response: Optional[str]
-    
+
     # Streaming tokens as they're generated
     streaming_tokens: List[str]
-    
+
     # Whether response is complete
     response_complete: bool
-    
+
     # ============================================
     # Metadata & Observability
     # ============================================
-    
+
     # Trace metadata for Langfuse
     trace_metadata: Optional[TraceMetadata]
-    
+
     # Error information if something failed
     error: Optional[str]
-    
+
     # Domain config (personal vs buzzy)
     domain: Literal["personal", "buzzy"]
 
@@ -157,13 +158,13 @@ def create_initial_state(
     """
     import uuid
     from datetime import datetime, timezone
-    
+
     return AgentState(
         # Conversation
         messages=existing_messages or [],
         conversation_summary=conversation_summary,
         current_input=user_input,
-        
+
         # Processing
         current_node="start",
         node_states={
@@ -174,7 +175,7 @@ def create_initial_state(
             "fallback_response": "pending",
         },
         user_intent=None,
-        
+
         # RAG
         retrieved_chunks=[],
         retrieved_context=None,
@@ -182,12 +183,12 @@ def create_initial_state(
         retrieval_scores=[],
         retrieved_chunk_ids=[],
         query_projection=None,
-        
+
         # Response
         response=None,
         streaming_tokens=[],
         response_complete=False,
-        
+
         # Metadata
         trace_metadata=TraceMetadata(
             trace_id=str(uuid.uuid4()),

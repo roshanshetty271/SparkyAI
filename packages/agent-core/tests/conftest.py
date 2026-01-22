@@ -1,6 +1,8 @@
 """Pytest configuration and fixtures for agent-core tests."""
-import pytest
 from unittest.mock import Mock
+
+import pytest
+
 from agent_core.state import AgentState
 
 

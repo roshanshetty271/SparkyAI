@@ -6,23 +6,22 @@ Defines the complete agent workflow as a StateGraph.
 This is the main entry point for the agent.
 """
 
-from typing import Optional, AsyncIterator, Dict, Any, Literal
-import asyncio
+from typing import Any, AsyncIterator, Dict, Literal, Optional
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from agent_core.state import AgentState, create_initial_state, get_node_graph_data
+from agent_core.config import settings
 from agent_core.nodes import (
+    fallback_response_node,
     greeter_node,
     intent_classifier_node,
     rag_retriever_node,
     response_generator_node,
-    fallback_response_node,
 )
 from agent_core.nodes.intent_classifier import route_after_intent
 from agent_core.nodes.rag_retriever import route_after_rag
 from agent_core.nodes.response_generator import response_generator_streaming
-from agent_core.config import settings
+from agent_core.state import AgentState, create_initial_state, get_node_graph_data
 from agent_core.utils import get_tracer
 
 
@@ -50,24 +49,24 @@ def create_agent_graph() -> StateGraph:
     Returns:
         Compiled StateGraph ready for invocation
     """
-    
+
     # Create the graph with our state schema
     graph = StateGraph(AgentState)
-    
+
     # Add nodes
     graph.add_node("greeter", greeter_node)
     graph.add_node("intent_classifier", intent_classifier_node)
     graph.add_node("rag_retriever", rag_retriever_node)
     graph.add_node("response_generator", response_generator_node)
     graph.add_node("fallback_response", fallback_response_node)
-    
+
     # Set entry point
     graph.set_entry_point("greeter")
-    
+
     # Add edges
     # Greeter always goes to intent classifier
     graph.add_edge("greeter", "intent_classifier")
-    
+
     # Intent classifier routes conditionally
     graph.add_conditional_edges(
         "intent_classifier",
@@ -78,7 +77,7 @@ def create_agent_graph() -> StateGraph:
             "fallback_response": "fallback_response",
         }
     )
-    
+
     # RAG retriever routes based on confidence
     graph.add_conditional_edges(
         "rag_retriever",
@@ -88,11 +87,11 @@ def create_agent_graph() -> StateGraph:
             "fallback_response": "fallback_response",
         }
     )
-    
+
     # Terminal nodes go to END
     graph.add_edge("response_generator", END)
     graph.add_edge("fallback_response", END)
-    
+
     return graph.compile()
 
 
@@ -110,7 +109,7 @@ class AgentGraph:
         async for event in agent.stream("Tell me about your projects", session_id="abc123"):
             print(event)
     """
-    
+
     def __init__(self, domain: Literal["personal", "buzzy"] = "personal"):
         """
         Initialize the agent graph.
@@ -121,16 +120,16 @@ class AgentGraph:
         self.domain = domain
         self._graph = create_agent_graph()
         self._sessions: Dict[str, AgentState] = {}
-    
+
     def get_session_state(self, session_id: str) -> Optional[AgentState]:
         """Get the current state for a session."""
         return self._sessions.get(session_id)
-    
+
     def clear_session(self, session_id: str) -> None:
         """Clear a session's state."""
         if session_id in self._sessions:
             del self._sessions[session_id]
-    
+
     def invoke(
         self,
         user_input: str,
@@ -148,7 +147,7 @@ class AgentGraph:
         """
         # Get existing session or create new
         existing_state = self._sessions.get(session_id)
-        
+
         # Create initial state for this invocation
         state = create_initial_state(
             user_input=user_input,
@@ -157,7 +156,7 @@ class AgentGraph:
             existing_messages=existing_state["messages"] if existing_state else None,
             conversation_summary=existing_state.get("conversation_summary") if existing_state else None,
         )
-        
+
         # Create Langfuse trace
         tracer = get_tracer()
         trace_id = state.get("trace_metadata", {}).get("trace_id", "unknown")
@@ -168,10 +167,10 @@ class AgentGraph:
                 user_input=user_input,
                 metadata={"domain": self.domain},
             )
-        
+
         # Run the graph
         result = self._graph.invoke(state)
-        
+
         # Update Langfuse trace with output
         if tracer.enabled:
             tracer.update_trace(
@@ -187,12 +186,12 @@ class AgentGraph:
                 tags=[self.domain, result.get("user_intent", "unknown")],
             )
             tracer.flush()
-        
+
         # Update session
         self._sessions[session_id] = result
-        
+
         return result
-    
+
     async def stream(
         self,
         user_input: str,
@@ -212,7 +211,7 @@ class AgentGraph:
         """
         # Get existing session
         existing_state = self._sessions.get(session_id)
-        
+
         # Create initial state
         state = create_initial_state(
             user_input=user_input,
@@ -221,7 +220,7 @@ class AgentGraph:
             existing_messages=existing_state["messages"] if existing_state else None,
             conversation_summary=existing_state.get("conversation_summary") if existing_state else None,
         )
-        
+
         # Create Langfuse trace
         tracer = get_tracer()
         trace_id = state["trace_metadata"]["trace_id"]
@@ -232,7 +231,7 @@ class AgentGraph:
                 user_input=user_input,
                 metadata={"domain": self.domain},
             )
-        
+
         # Emit initial state
         yield {
             "event": "start",
@@ -242,7 +241,7 @@ class AgentGraph:
                 "node_states": state["node_states"],
             }
         }
-        
+
         # Run greeter
         greeter_update = greeter_node(state)
         state = {**state, **greeter_update}
@@ -253,16 +252,16 @@ class AgentGraph:
                 "node_states": state["node_states"],
             }
         }
-        
+
         # Run intent classifier
         yield {
             "event": "node_enter",
             "payload": {"node": "intent_classifier"}
         }
-        
+
         intent_update = intent_classifier_node(state)
         state = {**state, **intent_update}
-        
+
         yield {
             "event": "node_complete",
             "payload": {
@@ -271,20 +270,20 @@ class AgentGraph:
                 "node_states": state["node_states"],
             }
         }
-        
+
         # Route based on intent
         next_node = route_after_intent(state)
-        
+
         if next_node == "rag_retriever":
             # Run RAG
             yield {
                 "event": "node_enter",
                 "payload": {"node": "rag_retriever"}
             }
-            
+
             rag_update = rag_retriever_node(state)
             state = {**state, **rag_update}
-            
+
             yield {
                 "event": "rag_results",
                 "payload": {
@@ -296,20 +295,20 @@ class AgentGraph:
                     "node_states": state["node_states"],
                 }
             }
-            
+
             # Route after RAG
             next_node = route_after_rag(state)
-        
+
         # Generate response (streaming)
         if next_node == "response_generator":
             yield {
                 "event": "node_enter",
                 "payload": {"node": "response_generator"}
             }
-            
+
             async for update in response_generator_streaming(state):
                 state = {**state, **update}
-                
+
                 if "streaming_tokens" in update and update["streaming_tokens"]:
                     # Emit token event
                     yield {
@@ -319,7 +318,7 @@ class AgentGraph:
                             "full_response": state.get("response", ""),
                         }
                     }
-                
+
                 if update.get("response_complete"):
                     yield {
                         "event": "node_complete",
@@ -328,16 +327,16 @@ class AgentGraph:
                             "node_states": state["node_states"],
                         }
                     }
-        
+
         elif next_node == "fallback_response":
             yield {
                 "event": "node_enter",
                 "payload": {"node": "fallback_response"}
             }
-            
+
             fallback_update = fallback_response_node(state)
             state = {**state, **fallback_update}
-            
+
             yield {
                 "event": "node_complete",
                 "payload": {
@@ -345,7 +344,7 @@ class AgentGraph:
                     "node_states": state["node_states"],
                 }
             }
-            
+
             # Emit response as tokens for consistency
             yield {
                 "event": "token",
@@ -354,10 +353,10 @@ class AgentGraph:
                     "full_response": state["response"],
                 }
             }
-        
+
         # Update session
         self._sessions[session_id] = state
-        
+
         # Update Langfuse trace with output
         if tracer.enabled:
             tracer.update_trace(
@@ -373,7 +372,7 @@ class AgentGraph:
                 tags=[self.domain, state.get("user_intent", "unknown")],
             )
             tracer.flush()
-        
+
         # Emit completion
         yield {
             "event": "complete",
@@ -386,7 +385,7 @@ class AgentGraph:
                 "estimated_cost_usd": state["trace_metadata"]["estimated_cost_usd"],
             }
         }
-    
+
     @staticmethod
     def get_graph_structure() -> Dict[str, Any]:
         """

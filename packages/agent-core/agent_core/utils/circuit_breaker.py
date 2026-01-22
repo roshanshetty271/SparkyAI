@@ -9,13 +9,13 @@ is down or experiencing issues. The circuit breaker has three states:
 Based on the "Release It!" pattern by Michael Nygard.
 """
 
-import time
 import asyncio
-from enum import Enum
-from typing import Optional, Callable, TypeVar, Any, Awaitable
-from dataclasses import dataclass, field
-from functools import wraps
 import logging
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from functools import wraps
+from typing import Awaitable, Callable, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +32,19 @@ class CircuitState(Enum):
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker behavior."""
-    
+
     # Number of failures before opening circuit
     failure_threshold: int = 5
-    
+
     # Time in seconds before attempting recovery
     recovery_timeout: float = 60.0
-    
+
     # Number of successful calls needed to close from half-open
     success_threshold: int = 2
-    
+
     # Time window for counting failures (seconds)
     failure_window: float = 120.0
-    
+
     # Exceptions that should trigger the circuit breaker
     monitored_exceptions: tuple = (Exception,)
 
@@ -52,7 +52,7 @@ class CircuitBreakerConfig:
 @dataclass
 class CircuitBreakerStats:
     """Statistics for monitoring circuit breaker behavior."""
-    
+
     state: CircuitState = CircuitState.CLOSED
     failure_count: int = 0
     success_count: int = 0
@@ -61,7 +61,7 @@ class CircuitBreakerStats:
     total_calls: int = 0
     total_failures: int = 0
     total_successes: int = 0
-    
+
     def to_dict(self) -> dict:
         """Convert stats to dictionary."""
         return {
@@ -93,7 +93,7 @@ class CircuitBreaker:
         
         result = await call_openai()
     """
-    
+
     def __init__(
         self,
         name: str,
@@ -109,54 +109,54 @@ class CircuitBreaker:
         self.config = config or CircuitBreakerConfig()
         self.stats = CircuitBreakerStats()
         self._lock = asyncio.Lock()
-    
+
     def _should_attempt_reset(self) -> bool:
         """Check if we should attempt to reset the circuit."""
         if self.stats.state != CircuitState.OPEN:
             return False
-        
+
         if self.stats.last_failure_time is None:
             return True
-        
+
         time_since_failure = time.time() - self.stats.last_failure_time
         return time_since_failure >= self.config.recovery_timeout
-    
+
     def _is_failure_window_expired(self) -> bool:
         """Check if the failure counting window has expired."""
         if self.stats.last_failure_time is None:
             return True
-        
+
         time_since_failure = time.time() - self.stats.last_failure_time
         return time_since_failure >= self.config.failure_window
-    
+
     async def _record_success(self):
         """Record a successful call."""
         async with self._lock:
             self.stats.total_calls += 1
             self.stats.total_successes += 1
-            
+
             if self.stats.state == CircuitState.HALF_OPEN:
                 self.stats.success_count += 1
                 logger.info(
                     f"Circuit breaker '{self.name}': Success in HALF_OPEN "
                     f"({self.stats.success_count}/{self.config.success_threshold})"
                 )
-                
+
                 if self.stats.success_count >= self.config.success_threshold:
                     self._close_circuit()
-            
+
             elif self.stats.state == CircuitState.CLOSED:
                 # Reset failure count if we're in a new window
                 if self._is_failure_window_expired():
                     self.stats.failure_count = 0
-    
+
     async def _record_failure(self, exception: Exception):
         """Record a failed call."""
         async with self._lock:
             self.stats.total_calls += 1
             self.stats.total_failures += 1
             self.stats.last_failure_time = time.time()
-            
+
             if self.stats.state == CircuitState.HALF_OPEN:
                 # Any failure in half-open immediately opens circuit
                 logger.warning(
@@ -164,17 +164,17 @@ class CircuitBreaker:
                     f"reopening circuit"
                 )
                 self._open_circuit()
-            
+
             elif self.stats.state == CircuitState.CLOSED:
                 self.stats.failure_count += 1
                 logger.warning(
                     f"Circuit breaker '{self.name}': Failure "
                     f"({self.stats.failure_count}/{self.config.failure_threshold})"
                 )
-                
+
                 if self.stats.failure_count >= self.config.failure_threshold:
                     self._open_circuit()
-    
+
     def _open_circuit(self):
         """Open the circuit (block all requests)."""
         self.stats.state = CircuitState.OPEN
@@ -184,7 +184,7 @@ class CircuitBreaker:
             f"Circuit breaker '{self.name}': OPENED "
             f"(failures: {self.stats.failure_count})"
         )
-    
+
     def _close_circuit(self):
         """Close the circuit (allow all requests)."""
         self.stats.state = CircuitState.CLOSED
@@ -192,14 +192,14 @@ class CircuitBreaker:
         self.stats.failure_count = 0
         self.stats.success_count = 0
         logger.info(f"Circuit breaker '{self.name}': CLOSED")
-    
+
     def _half_open_circuit(self):
         """Half-open the circuit (allow test requests)."""
         self.stats.state = CircuitState.HALF_OPEN
         self.stats.last_state_change = time.time()
         self.stats.success_count = 0
         logger.info(f"Circuit breaker '{self.name}': HALF_OPEN (testing recovery)")
-    
+
     async def call(
         self,
         func: Callable[..., Awaitable[T]],
@@ -225,7 +225,7 @@ class CircuitBreaker:
             async with self._lock:
                 if self.stats.state == CircuitState.OPEN:
                     self._half_open_circuit()
-        
+
         # Block if circuit is open
         if self.stats.state == CircuitState.OPEN:
             raise CircuitBreakerError(
@@ -233,17 +233,17 @@ class CircuitBreaker:
                 f"Service unavailable. Try again in "
                 f"{self.config.recovery_timeout}s."
             )
-        
+
         # Attempt the call
         try:
             result = await func(*args, **kwargs)
             await self._record_success()
             return result
-        
+
         except self.config.monitored_exceptions as e:
             await self._record_failure(e)
             raise
-    
+
     def protect(self, func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         """Decorator to protect an async function with circuit breaker.
         
@@ -255,13 +255,13 @@ class CircuitBreaker:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> T:
             return await self.call(func, *args, **kwargs)
-        
+
         return wrapper
-    
+
     def get_stats(self) -> CircuitBreakerStats:
         """Get current statistics."""
         return self.stats
-    
+
     def reset(self):
         """Manually reset the circuit breaker."""
         self.stats = CircuitBreakerStats()

@@ -1,7 +1,7 @@
 """Pytest configuration and fixtures for server tests."""
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock
 from server.main import app
 
 

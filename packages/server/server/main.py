@@ -11,7 +11,7 @@ Main application entry point with:
 import json
 import asyncio
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
@@ -22,7 +22,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from agent_core import create_agent_graph, AgentGraph, settings
+from agent_core import AgentGraph, settings
 from agent_core.state import get_node_graph_data
 from agent_core.utils import sanitize_input, sanitize_session_id, is_valid_session_id
 from agent_core.nodes.rag_retriever import embedding_store
@@ -42,20 +42,20 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown."""
     # Startup
     print("🚀 Starting SparkyAI server...")
-    
+
     # Load embeddings
     try:
         embedding_store.load(settings.embeddings_dir)
         print(f"✅ Loaded {len(embedding_store.chunks)} knowledge chunks")
     except Exception as e:
         print(f"⚠️ Could not load embeddings: {e}")
-    
+
     # Initialize agent
     app.state.agent = AgentGraph(domain=settings.agent_config)
     print(f"✅ Agent initialized (domain: {settings.agent_config})")
-    
+
     yield
-    
+
     # Shutdown
     print("👋 Shutting down SparkyAI server...")
 
@@ -163,16 +163,16 @@ async def health_check(redis: RedisClient = Depends(get_redis)):
     """
     # Check OpenAI (basic - just verify key exists)
     openai_ok = bool(settings.openai_api_key)
-    
+
     # Check Redis
     try:
         redis_ok = await redis.ping() if redis else False
     except Exception:
         redis_ok = False
-    
+
     # Check embeddings
     embeddings_loaded = len(embedding_store.chunks) > 0
-    
+
     return HealthResponse(
         status="healthy" if (openai_ok and embeddings_loaded) else "degraded",
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -198,13 +198,13 @@ async def chat(
     """
     # Sanitize input
     sanitized_message, warning = sanitize_input(body.message, max_length=500)
-    
+
     if not sanitized_message:
         raise HTTPException(
             status_code=400,
             detail=warning or "Invalid message"
         )
-    
+
     # Get or create session ID
     session_id = body.session_id
     if not session_id or not is_valid_session_id(session_id):
@@ -212,7 +212,7 @@ async def chat(
         session_id = str(uuid.uuid4())
     else:
         session_id = sanitize_session_id(session_id)
-    
+
     # Check budget
     if redis:
         budget = BudgetTracker(redis)
@@ -221,24 +221,24 @@ async def chat(
                 status_code=429,
                 detail="Daily budget exceeded. Please try again tomorrow or contact Roshan directly."
             )
-    
+
     # Get agent from app state
     agent: AgentGraph = request.app.state.agent
-    
+
     # Invoke agent
     try:
         result = agent.invoke(sanitized_message, session_id)
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=500,
             detail="An error occurred processing your request."
         )
-    
+
     # Track costs in Redis
     if redis:
         estimated_cost = result.get("trace_metadata", {}).get("estimated_cost_usd", 0)
         await budget.record_spend(estimated_cost)
-    
+
     return ChatResponse(
         response=result.get("response", ""),
         session_id=session_id,
@@ -270,7 +270,7 @@ async def get_embedding_points():
     Used by the Embedding Space Explorer visualization.
     """
     points = embedding_store.get_all_points_for_visualization()
-    
+
     return EmbeddingsResponse(
         points=[EmbeddingPoint(**p) for p in points],
         total_count=len(points),
@@ -303,20 +303,20 @@ async def websocket_endpoint(
     if not is_valid_session_id(session_id):
         await websocket.close(code=4001, reason="Invalid session ID")
         return
-    
+
     session_id = sanitize_session_id(session_id)
-    
+
     # Accept connection
     await ws_manager.connect(websocket, session_id)
-    
+
     try:
         # Get agent
         agent: AgentGraph = websocket.app.state.agent
-        
+
         while True:
             # Wait for message
             data = await websocket.receive_text()
-            
+
             try:
                 message = json.loads(data)
             except json.JSONDecodeError:
@@ -326,14 +326,14 @@ async def websocket_endpoint(
                     "Message must be valid JSON"
                 )
                 continue
-            
+
             # Handle different message types
             msg_type = message.get("type", "message")
-            
+
             if msg_type == "ping":
                 # Heartbeat
                 await ws_manager.send_event(session_id, "pong", {})
-                
+
             elif msg_type == "state_sync_request":
                 # Client requesting current state (after reconnect)
                 state = agent.get_session_state(session_id)
@@ -349,15 +349,15 @@ async def websocket_endpoint(
                         "node_states": None,
                         "streaming_response": None,
                     })
-                
+
             elif msg_type == "message":
                 # User message - process with streaming
                 payload = message.get("payload", {})
                 user_text = payload.get("text", "")
-                
+
                 # Sanitize
                 sanitized, warning = sanitize_input(user_text)
-                
+
                 if not sanitized:
                     await ws_manager.send_error(
                         session_id,
@@ -365,7 +365,7 @@ async def websocket_endpoint(
                         warning or "Invalid message"
                     )
                     continue
-                
+
                 # Stream agent response
                 try:
                     async for event in agent.stream(sanitized, session_id):
@@ -374,27 +374,27 @@ async def websocket_endpoint(
                             event["event"],
                             event["payload"]
                         )
-                        
+
                         # Small delay to prevent flooding
                         await asyncio.sleep(0.01)
-                        
-                except Exception as e:
+
+                except Exception:
                     await ws_manager.send_error(
                         session_id,
                         "PROCESSING_ERROR",
                         "An error occurred processing your message."
                     )
-            
+
             else:
                 await ws_manager.send_error(
                     session_id,
                     "UNKNOWN_TYPE",
                     f"Unknown message type: {msg_type}"
                 )
-    
+
     except WebSocketDisconnect:
         ws_manager.disconnect(session_id)
-    except Exception as e:
+    except Exception:
         ws_manager.disconnect(session_id)
         raise
 

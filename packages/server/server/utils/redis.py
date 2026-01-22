@@ -7,7 +7,6 @@ Free tier: 10,000 commands/day.
 """
 
 from typing import Optional, Any
-import json
 
 from agent_core.config import settings
 
@@ -19,7 +18,7 @@ class RedisClient:
     Uses Upstash's REST API which is perfect for serverless
     and doesn't require persistent connections.
     """
-    
+
     def __init__(self, url: str, token: str):
         """
         Initialize Redis client.
@@ -31,12 +30,12 @@ class RedisClient:
         self.url = url.rstrip("/")
         self.token = token
         self._enabled = bool(url and token)
-    
+
     @property
     def enabled(self) -> bool:
         """Check if Redis is configured."""
         return self._enabled
-    
+
     async def _request(self, *args) -> Any:
         """
         Make a request to Upstash REST API.
@@ -49,9 +48,9 @@ class RedisClient:
         """
         if not self._enabled:
             return None
-        
+
         import httpx
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 self.url,
@@ -61,13 +60,13 @@ class RedisClient:
                 },
                 json=list(args),
             )
-            
+
             if response.status_code != 200:
                 return None
-            
+
             data = response.json()
             return data.get("result")
-    
+
     async def ping(self) -> bool:
         """
         Ping Redis to check connectivity.
@@ -80,7 +79,7 @@ class RedisClient:
             return result == "PONG"
         except Exception:
             return False
-    
+
     async def get(self, key: str) -> Optional[str]:
         """
         Get a value from Redis.
@@ -92,7 +91,7 @@ class RedisClient:
             Value if exists, None otherwise
         """
         return await self._request("GET", key)
-    
+
     async def set(
         self, 
         key: str, 
@@ -115,7 +114,7 @@ class RedisClient:
         else:
             result = await self._request("SET", key, value)
         return result == "OK"
-    
+
     async def incr(self, key: str) -> Optional[int]:
         """
         Increment a counter.
@@ -128,7 +127,7 @@ class RedisClient:
         """
         result = await self._request("INCR", key)
         return int(result) if result is not None else None
-    
+
     async def incrbyfloat(self, key: str, amount: float) -> Optional[float]:
         """
         Increment a float counter.
@@ -142,7 +141,7 @@ class RedisClient:
         """
         result = await self._request("INCRBYFLOAT", key, str(amount))
         return float(result) if result is not None else None
-    
+
     async def expire(self, key: str, seconds: int) -> bool:
         """
         Set expiration on a key.
@@ -156,7 +155,7 @@ class RedisClient:
         """
         result = await self._request("EXPIRE", key, str(seconds))
         return result == 1
-    
+
     async def ttl(self, key: str) -> Optional[int]:
         """
         Get time-to-live for a key.
@@ -169,7 +168,7 @@ class RedisClient:
         """
         result = await self._request("TTL", key)
         return int(result) if result is not None else None
-    
+
     async def delete(self, key: str) -> bool:
         """
         Delete a key.
@@ -182,7 +181,7 @@ class RedisClient:
         """
         result = await self._request("DEL", key)
         return result == 1
-    
+
     async def hset(self, key: str, field: str, value: str) -> bool:
         """
         Set a hash field.
@@ -197,7 +196,7 @@ class RedisClient:
         """
         result = await self._request("HSET", key, field, value)
         return result is not None
-    
+
     async def hget(self, key: str, field: str) -> Optional[str]:
         """
         Get a hash field.
@@ -210,7 +209,7 @@ class RedisClient:
             Field value if exists
         """
         return await self._request("HGET", key, field)
-    
+
     async def hgetall(self, key: str) -> Optional[dict]:
         """
         Get all fields in a hash.
@@ -240,7 +239,7 @@ def get_redis() -> Optional[RedisClient]:
         RedisClient if configured, None otherwise
     """
     global _redis_client
-    
+
     if _redis_client is None:
         if settings.redis_enabled:
             _redis_client = RedisClient(
@@ -249,5 +248,5 @@ def get_redis() -> Optional[RedisClient]:
             )
         else:
             return None
-    
+
     return _redis_client

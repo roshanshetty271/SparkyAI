@@ -144,7 +144,7 @@ def response_generator_node(state: AgentState) -> Dict[str, Any]:
 
         # Log evaluation to Langfuse if available
         if evaluation_score and tracer.enabled:
-            tracer.langfuse.score(
+            tracer.client.score(
                 trace_id=trace_id,
                 name="response_quality",
                 value=evaluation_score.overall,
@@ -388,7 +388,7 @@ async def response_generator_streaming(
 
     # Log evaluation to Langfuse if available
     if evaluation_score and tracer.enabled:
-        tracer.langfuse.score(
+        tracer.client.score(
             trace_id=trace_id,
             name="response_quality",
             value=evaluation_score.overall,

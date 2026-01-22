@@ -23,6 +23,7 @@ from agent_core.nodes.intent_classifier import route_after_intent
 from agent_core.nodes.rag_retriever import route_after_rag
 from agent_core.nodes.response_generator import response_generator_streaming
 from agent_core.config import settings
+from agent_core.utils import get_tracer
 
 
 def create_agent_graph() -> StateGraph:
@@ -157,8 +158,35 @@ class AgentGraph:
             conversation_summary=existing_state.get("conversation_summary") if existing_state else None,
         )
         
+        # Create Langfuse trace
+        tracer = get_tracer()
+        trace_id = state.get("trace_metadata", {}).get("trace_id", "unknown")
+        if tracer.enabled:
+            tracer.create_trace(
+                trace_id=trace_id,
+                session_id=session_id,
+                user_input=user_input,
+                metadata={"domain": self.domain},
+            )
+        
         # Run the graph
         result = self._graph.invoke(state)
+        
+        # Update Langfuse trace with output
+        if tracer.enabled:
+            tracer.update_trace(
+                trace_id=trace_id,
+                output=result.get("response", ""),
+                metadata={
+                    "domain": self.domain,
+                    "intent": result.get("user_intent"),
+                    "retrieval_confidence": result.get("retrieval_confidence"),
+                    "total_tokens": result.get("trace_metadata", {}).get("total_tokens"),
+                    "cost_usd": result.get("trace_metadata", {}).get("estimated_cost_usd"),
+                },
+                tags=[self.domain, result.get("user_intent", "unknown")],
+            )
+            tracer.flush()
         
         # Update session
         self._sessions[session_id] = result
@@ -194,11 +222,22 @@ class AgentGraph:
             conversation_summary=existing_state.get("conversation_summary") if existing_state else None,
         )
         
+        # Create Langfuse trace
+        tracer = get_tracer()
+        trace_id = state["trace_metadata"]["trace_id"]
+        if tracer.enabled:
+            tracer.create_trace(
+                trace_id=trace_id,
+                session_id=session_id,
+                user_input=user_input,
+                metadata={"domain": self.domain},
+            )
+        
         # Emit initial state
         yield {
             "event": "start",
             "payload": {
-                "trace_id": state["trace_metadata"]["trace_id"],
+                "trace_id": trace_id,
                 "session_id": session_id,
                 "node_states": state["node_states"],
             }
@@ -318,6 +357,22 @@ class AgentGraph:
         
         # Update session
         self._sessions[session_id] = state
+        
+        # Update Langfuse trace with output
+        if tracer.enabled:
+            tracer.update_trace(
+                trace_id=trace_id,
+                output=state.get("response", ""),
+                metadata={
+                    "domain": self.domain,
+                    "intent": state.get("user_intent"),
+                    "retrieval_confidence": state.get("retrieval_confidence"),
+                    "total_tokens": state.get("trace_metadata", {}).get("total_tokens"),
+                    "cost_usd": state.get("trace_metadata", {}).get("estimated_cost_usd"),
+                },
+                tags=[self.domain, state.get("user_intent", "unknown")],
+            )
+            tracer.flush()
         
         # Emit completion
         yield {

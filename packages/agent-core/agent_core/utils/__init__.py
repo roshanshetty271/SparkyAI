@@ -28,6 +28,13 @@ from agent_core.utils.circuit_breaker import (
     reset_all_breakers,
 )
 
+# Export Langfuse tracer
+from agent_core.utils.langfuse_tracer import (
+    LangfuseTracer,
+    get_tracer,
+    reset_tracer,
+)
+
 
 # Prompt injection patterns to block
 INJECTION_PATTERNS = [

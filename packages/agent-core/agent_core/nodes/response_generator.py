@@ -24,6 +24,7 @@ from agent_core.utils import (
     get_window_manager,
     get_openai_breaker,
     CircuitBreakerError,
+    get_tracer,
 )
 
 
@@ -108,9 +109,26 @@ def response_generator_node(state: AgentState) -> Dict[str, Any]:
     
     # Generate response with circuit breaker protection
     breaker = get_openai_breaker()
+    tracer = get_tracer()
+    trace_id = state.get("trace_metadata", {}).get("trace_id", "unknown")
+    session_id = state.get("session_id", "unknown")
     
     try:
-        response = llm.invoke(messages)
+        # Create callback handler for Langfuse tracing
+        langfuse_handler = tracer.get_callback_handler(
+            trace_id=trace_id,
+            session_id=session_id,
+            tags=["response_generation", domain, intent],
+            metadata={"node": "response_generator", "domain": domain, "intent": intent},
+        )
+        
+        # Prepare callbacks list
+        callbacks = [langfuse_handler] if langfuse_handler else []
+        
+        response = llm.invoke(
+            messages,
+            config={"callbacks": callbacks} if callbacks else {},
+        )
         response_text = response.content
         
         # Count actual tokens used
@@ -266,6 +284,9 @@ async def response_generator_streaming(
     full_response = ""
     streaming_tokens = []
     breaker = get_openai_breaker()
+    tracer = get_tracer()
+    trace_id = state.get("trace_metadata", {}).get("trace_id", "unknown")
+    session_id = state.get("session_id", "unknown")
     
     # Count input tokens accurately
     input_tokens = token_counter.count_messages_tokens([
@@ -275,9 +296,23 @@ async def response_generator_streaming(
     ])
     
     try:
+        # Create callback handler for Langfuse tracing
+        langfuse_handler = tracer.get_callback_handler(
+            trace_id=trace_id,
+            session_id=session_id,
+            tags=["response_generation", "streaming", domain, intent],
+            metadata={"node": "response_generator", "domain": domain, "intent": intent, "streaming": True},
+        )
+        
+        # Prepare callbacks list
+        callbacks = [langfuse_handler] if langfuse_handler else []
+        
         # Wrap streaming in circuit breaker
         async def stream_with_protection():
-            async for chunk in llm.astream(messages):
+            async for chunk in llm.astream(
+                messages,
+                config={"callbacks": callbacks} if callbacks else {},
+            ):
                 if chunk.content:
                     yield chunk
         

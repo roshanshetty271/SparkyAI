@@ -16,6 +16,7 @@ from langchain_openai import OpenAIEmbeddings
 
 from agent_core.state import AgentState, NodeTiming, RetrievedChunk, QueryProjection
 from agent_core.config import settings
+from agent_core.utils import get_tracer
 
 
 class EmbeddingStore:
@@ -181,6 +182,11 @@ def rag_retriever_node(state: AgentState) -> Dict[str, Any]:
     node_states = state["node_states"].copy()
     node_states["rag_retriever"] = "active"
     
+    # Get tracer
+    tracer = get_tracer()
+    trace_id = state.get("trace_metadata", {}).get("trace_id", "unknown")
+    session_id = state.get("session_id", "unknown")
+    
     # Initialize embedding model
     embeddings_model = OpenAIEmbeddings(
         model=settings.openai_embedding_model,
@@ -252,6 +258,21 @@ def rag_retriever_node(state: AgentState) -> Dict[str, Any]:
         retrieved_context = "\n\n---\n\n".join(context_parts) if context_parts else None
     else:
         retrieved_context = None
+    
+    # Log RAG retrieval to Langfuse
+    if tracer.enabled:
+        tracer.trace_rag_retrieval(
+            trace_id=trace_id,
+            query=state["current_input"],
+            results=[chunk["content"] for chunk in retrieved_chunks],
+            scores=retrieval_scores,
+            metadata={
+                "top_k": settings.rag_top_k,
+                "threshold": settings.rag_similarity_threshold,
+                "confidence": retrieval_confidence,
+                "chunks_above_threshold": len([s for s in retrieval_scores if s >= settings.rag_similarity_threshold]),
+            },
+        )
     
     end_time = int(time.time() * 1000)
     

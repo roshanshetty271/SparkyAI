@@ -15,7 +15,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from agent_core.state import AgentState, NodeTiming
 from agent_core.config import settings
 from agent_core.prompts import get_intent_prompt
-from agent_core.utils import get_openai_breaker, CircuitBreakerError
+from agent_core.utils import get_openai_breaker, CircuitBreakerError, get_tracer
 
 
 # Valid intents for each domain
@@ -66,24 +66,36 @@ def intent_classifier_node(state: AgentState) -> Dict[str, Any]:
     # Format the prompt
     formatted_prompt = intent_prompt.format(input=state["current_input"])
     
-    # Get circuit breaker
+    # Get circuit breaker and tracer
     breaker = get_openai_breaker()
+    tracer = get_tracer()
+    
+    # Get trace ID from state
+    trace_id = state.get("trace_metadata", {}).get("trace_id", "unknown")
+    session_id = state.get("session_id", "unknown")
     
     # Call LLM with circuit breaker protection
     try:
-        # Create async wrapper for the sync LLM call
-        async def call_llm():
-            return llm.invoke([
-                SystemMessage(content="You are an intent classifier. Respond with only the category name."),
-                HumanMessage(content=formatted_prompt),
-            ])
+        # Create callback handler for Langfuse tracing
+        langfuse_handler = tracer.get_callback_handler(
+            trace_id=trace_id,
+            session_id=session_id,
+            tags=["intent_classification", domain],
+            metadata={"node": "intent_classifier", "domain": domain},
+        )
+        
+        # Prepare callbacks list
+        callbacks = [langfuse_handler] if langfuse_handler else []
         
         # Use circuit breaker (even though we're calling it synchronously here)
         # In a real async context, this would be: response = await breaker.call(call_llm)
-        response = llm.invoke([
-            SystemMessage(content="You are an intent classifier. Respond with only the category name."),
-            HumanMessage(content=formatted_prompt),
-        ])
+        response = llm.invoke(
+            [
+                SystemMessage(content="You are an intent classifier. Respond with only the category name."),
+                HumanMessage(content=formatted_prompt),
+            ],
+            config={"callbacks": callbacks} if callbacks else {},
+        )
         
         raw_intent = response.content.strip().lower()
         
@@ -95,6 +107,16 @@ def intent_classifier_node(state: AgentState) -> Dict[str, Any]:
         else:
             # Default to general if classification fails
             classified_intent = "general"
+        
+        # Log to Langfuse
+        tracer.trace_llm_call(
+            trace_id=trace_id,
+            node_name="intent_classifier",
+            prompt=formatted_prompt,
+            response=raw_intent,
+            model="gpt-4o-mini",
+            metadata={"validated_intent": classified_intent, "domain": domain},
+        )
     
     except CircuitBreakerError as e:
         # Circuit breaker is open - service is down

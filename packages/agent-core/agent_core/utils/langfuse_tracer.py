@@ -9,7 +9,10 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Dict, Optional, ParamSpec, TypeVar
 
 from langfuse import Langfuse
-from langfuse.callback import CallbackHandler
+try:
+    from langfuse.langchain import CallbackHandler
+except ImportError:
+    CallbackHandler = None
 
 from agent_core.config import settings
 

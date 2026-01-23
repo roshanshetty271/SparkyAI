@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # RAG Configuration
     rag_top_k: int = Field(default=5, description="Number of chunks to retrieve")
     rag_similarity_threshold: float = Field(
-        default=0.5,
+        default=0.35,
         description="Minimum similarity score for RAG results"
     )
 
@@ -87,11 +87,11 @@ class Settings(BaseSettings):
 
     # Embeddings paths
     embeddings_dir: str = Field(
-        default="data/embeddings",
+        default="../../data/embeddings",
         description="Directory for embedding files"
     )
     knowledge_dir: str = Field(
-        default="knowledge",
+        default="../../knowledge",
         description="Directory for knowledge markdown files"
     )
 

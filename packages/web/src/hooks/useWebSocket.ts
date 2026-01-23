@@ -12,12 +12,13 @@ const RECONNECT_DELAY = 1000
 export function useWebSocket(sessionId: string | null) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  
+
+  const reconnectAttemptRef = useRef(0)
+
   const [state, setState] = useState<WebSocketState>({
     isConnected: false,
     isConnecting: false,
     error: null,
-    reconnectAttempt: 0,
   })
 
   const {
@@ -27,6 +28,7 @@ export function useWebSocket(sessionId: string | null) {
     setNodeStates,
     setUserIntent,
     setRagResults,
+    clearRagResults,
     appendStreamingResponse,
     clearStreamingResponse,
     setTraceData,
@@ -38,7 +40,7 @@ export function useWebSocket(sessionId: string | null) {
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const data: ServerEvent = JSON.parse(event.data)
-      
+
       switch (data.event) {
         case 'connected':
           console.log('WebSocket connected:', data.payload.session_id)
@@ -62,6 +64,7 @@ export function useWebSocket(sessionId: string | null) {
         case 'start':
           setTyping(true)
           clearStreamingResponse()
+          clearRagResults()
           setNodeStates(data.payload.node_states as Record<string, NodeState>)
           break
 
@@ -150,11 +153,11 @@ export function useWebSocket(sessionId: string | null) {
 
     ws.onopen = () => {
       console.log('WebSocket opened')
+      reconnectAttemptRef.current = 0
       setState({
         isConnected: true,
         isConnecting: false,
         error: null,
-        reconnectAttempt: 0,
       })
     }
 
@@ -170,15 +173,13 @@ export function useWebSocket(sessionId: string | null) {
       }))
 
       // Attempt reconnection
-      if (event.code !== 1000 && state.reconnectAttempt < MAX_RECONNECT_ATTEMPTS) {
-        const delay = RECONNECT_DELAY * Math.pow(2, state.reconnectAttempt)
+      if (event.code !== 1000 && reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
+        const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current)
         console.log(`Reconnecting in ${delay}ms...`)
-        
+
+        reconnectAttemptRef.current += 1
+
         reconnectTimeoutRef.current = setTimeout(() => {
-          setState(prev => ({
-            ...prev,
-            reconnectAttempt: prev.reconnectAttempt + 1,
-          }))
           connect()
         }, delay)
       }
@@ -193,7 +194,7 @@ export function useWebSocket(sessionId: string | null) {
     }
 
     wsRef.current = ws
-  }, [sessionId, handleMessage, setConnected, state.reconnectAttempt])
+  }, [sessionId, handleMessage, setConnected])
 
   // Send message
   const sendMessage = useCallback((text: string) => {
@@ -238,17 +239,17 @@ export function useWebSocket(sessionId: string | null) {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
     }
-    
+
     if (wsRef.current) {
       wsRef.current.close(1000, 'User disconnect')
       wsRef.current = null
     }
-    
+
+    reconnectAttemptRef.current = 0
     setState({
       isConnected: false,
       isConnecting: false,
       error: null,
-      reconnectAttempt: 0,
     })
   }, [])
 

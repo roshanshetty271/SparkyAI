@@ -78,5 +78,4 @@ export interface WebSocketState {
   isConnected: boolean
   isConnecting: boolean
   error: string | null
-  reconnectAttempt: number
 }

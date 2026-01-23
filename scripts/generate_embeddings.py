@@ -23,12 +23,12 @@ import sys
 import numpy as np
 from sklearn.manifold import TSNE
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from packages.agent_core.agent_core.config import settings
+from agent_core.config import settings
 
 
 def load_markdown_files(knowledge_dir: Path) -> List[Dict[str, Any]]:

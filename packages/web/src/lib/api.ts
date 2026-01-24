@@ -6,6 +6,11 @@ import type { ChatResponse, EmbeddingsData, GraphStructure, HealthStatus } from 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+// Warn if API URL is missing in production
+if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
+  console.warn('⚠️ NEXT_PUBLIC_API_URL is not set. API requests will target localhost.')
+}
+
 export interface ApiError {
   error: string
   status_code: number
@@ -49,7 +54,7 @@ export async function sendChatMessage(message: string, sessionId?: string) {
       session_id: sessionId,
     }),
   })
-  
+
   return handleResponse<ChatResponse>(response)
 }
 

@@ -9,7 +9,7 @@ Uses Redis for persistent tracking across server restarts.
 from datetime import datetime, timezone
 
 from agent_core.config import settings
-from server.utils.redis import RedisClient
+from agent_core.utils.redis import RedisClient
 
 
 class BudgetTracker:

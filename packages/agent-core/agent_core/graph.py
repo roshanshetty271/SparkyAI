@@ -6,8 +6,10 @@ Defines the complete agent workflow as a StateGraph.
 This is the main entry point for the agent.
 """
 
+import json
 from typing import Any, AsyncIterator, Dict, Literal, Optional
 
+from langchain_core.messages import messages_from_dict, messages_to_dict
 from langgraph.graph import END, StateGraph
 
 from agent_core.config import settings
@@ -23,6 +25,7 @@ from agent_core.nodes.rag_retriever import route_after_rag
 from agent_core.nodes.response_generator import response_generator_streaming
 from agent_core.state import AgentState, create_initial_state, get_node_graph_data
 from agent_core.utils import get_tracer
+from agent_core.utils.redis import get_redis
 
 
 def create_agent_graph() -> StateGraph:
@@ -103,7 +106,7 @@ class AgentGraph:
         agent = AgentGraph()
         
         # Non-streaming
-        result = agent.invoke("Tell me about your React experience", session_id="abc123")
+        result = await agent.invoke("Tell me about your React experience", session_id="abc123")
         
         # Streaming
         async for event in agent.stream("Tell me about your projects", session_id="abc123"):
@@ -119,24 +122,64 @@ class AgentGraph:
         """
         self.domain = domain
         self._graph = create_agent_graph()
-        self._sessions: Dict[str, AgentState] = {}
+        self.redis = get_redis()
+        # Fallback in-memory storage if Redis is disabled
+        self._memory_store: Dict[str, AgentState] = {}
 
-    def get_session_state(self, session_id: str) -> Optional[AgentState]:
+    async def _load_session(self, session_id: str) -> Optional[AgentState]:
+        """Load session state from Redis or memory."""
+        if self.redis and self.redis.enabled:
+            data = await self.redis.get(f"session:{session_id}")
+            if data:
+                try:
+                    state_dict = json.loads(data)
+                    # Restore complex objects
+                    if "messages" in state_dict:
+                        state_dict["messages"] = messages_from_dict(state_dict["messages"])
+                    return state_dict
+                except Exception:
+                    return None
+            return None
+        return self._memory_store.get(session_id)
+
+    async def _save_session(self, session_id: str, state: AgentState) -> None:
+        """Save session state to Redis or memory."""
+        # Clean state for storage
+        # 1. Convert messages to dicts
+        storage_state = state.copy()
+        if "messages" in storage_state:
+            storage_state["messages"] = messages_to_dict(storage_state["messages"])
+        
+        # 2. Remove transient streaming tokens
+        storage_state["streaming_tokens"] = []
+
+        if self.redis and self.redis.enabled:
+            await self.redis.set(
+                f"session:{session_id}", 
+                json.dumps(storage_state),
+                ex=86400 * 7 # 7 day TTL
+            )
+        else:
+            self._memory_store[session_id] = state
+
+    async def get_session_state(self, session_id: str) -> Optional[AgentState]:
         """Get the current state for a session."""
-        return self._sessions.get(session_id)
+        return await self._load_session(session_id)
 
-    def clear_session(self, session_id: str) -> None:
+    async def clear_session(self, session_id: str) -> None:
         """Clear a session's state."""
-        if session_id in self._sessions:
-            del self._sessions[session_id]
+        if self.redis and self.redis.enabled:
+            await self.redis.delete(f"session:{session_id}")
+        if session_id in self._memory_store:
+            del self._memory_store[session_id]
 
-    def invoke(
+    async def invoke(
         self,
         user_input: str,
         session_id: str,
     ) -> AgentState:
         """
-        Process a user message synchronously.
+        Process a user message asynchronously.
         
         Args:
             user_input: The user's message
@@ -145,8 +188,8 @@ class AgentGraph:
         Returns:
             Final agent state with response
         """
-        # Get existing session or create new
-        existing_state = self._sessions.get(session_id)
+        # Load existing session
+        existing_state = await self._load_session(session_id)
 
         # Create initial state for this invocation
         state = create_initial_state(
@@ -169,7 +212,7 @@ class AgentGraph:
             )
 
         # Run the graph
-        result = self._graph.invoke(state)
+        result = await self._graph.ainvoke(state)
 
         # Update Langfuse trace with output
         if tracer.enabled:
@@ -187,8 +230,8 @@ class AgentGraph:
             )
             tracer.flush()
 
-        # Update session
-        self._sessions[session_id] = result
+        # Save session
+        await self._save_session(session_id, result)
 
         return result
 
@@ -209,8 +252,8 @@ class AgentGraph:
         Yields:
             State change events and streaming tokens
         """
-        # Get existing session
-        existing_state = self._sessions.get(session_id)
+        # Load existing session
+        existing_state = await self._load_session(session_id)
 
         # Create initial state
         state = create_initial_state(
@@ -354,8 +397,8 @@ class AgentGraph:
                 }
             }
 
-        # Update session
-        self._sessions[session_id] = state
+        # Save session
+        await self._save_session(session_id, state)
 
         # Update Langfuse trace with output
         if tracer.enabled:

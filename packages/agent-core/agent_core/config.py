@@ -4,7 +4,8 @@ Uses pydantic-settings for environment variable parsing and validation.
 """
 
 from functools import lru_cache
-from typing import Literal
+from pathlib import Path
+from typing import List, Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -85,13 +86,27 @@ class Settings(BaseSettings):
         description="Max total messages per session"
     )
 
+    # Security
+    cors_origins: List[str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+        description="List of allowed CORS origins"
+    )
+
     # Embeddings paths
+    # Resolve paths relative to this file's location to make package portable
+    # Layout: packages/agent-core/agent_core/config.py
+    # Root:   packages/agent-core/../../ (which is repo root)
+    _package_root = Path(__file__).parent.parent.parent.parent
+
     embeddings_dir: str = Field(
-        default="../../data/embeddings",
+        default=str(_package_root / "data/embeddings"),
         description="Directory for embedding files"
     )
     knowledge_dir: str = Field(
-        default="../../knowledge",
+        default=str(_package_root / "knowledge"),
         description="Directory for knowledge markdown files"
     )
 

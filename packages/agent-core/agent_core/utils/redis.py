@@ -52,20 +52,24 @@ class RedisClient:
         import httpx
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.url,
-                headers={
-                    "Authorization": f"Bearer {self.token}",
-                    "Content-Type": "application/json",
-                },
-                json=list(args),
-            )
+            try:
+                response = await client.post(
+                    self.url,
+                    headers={
+                        "Authorization": f"Bearer {self.token}",
+                        "Content-Type": "application/json",
+                    },
+                    json=list(args),
+                    timeout=5.0
+                )
 
-            if response.status_code != 200:
+                if response.status_code != 200:
+                    return None
+
+                data = response.json()
+                return data.get("result")
+            except Exception:
                 return None
-
-            data = response.json()
-            return data.get("result")
 
     async def ping(self) -> bool:
         """

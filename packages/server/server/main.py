@@ -29,7 +29,9 @@ from agent_core.nodes.rag_retriever import embedding_store
 
 from server.websocket import ConnectionManager
 from server.middleware.security import SecurityHeadersMiddleware
-from server.utils.redis import RedisClient, get_redis
+from server.websocket import ConnectionManager
+from server.middleware.security import SecurityHeadersMiddleware
+from agent_core.utils.redis import RedisClient, get_redis
 from server.utils.budget import BudgetTracker
 from server.utils.turnstile import get_turnstile_verifier
 
@@ -77,13 +79,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://roshan.dev",  # Your portfolio domain
-        "https://www.roshan.dev",
-        "https://easybee.ai",  # Buzzy demo
-    ],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -245,7 +241,7 @@ async def chat(
 
     # Invoke agent
     try:
-        result = agent.invoke(sanitized_message, session_id)
+        result = await agent.invoke(sanitized_message, session_id)
     except Exception:
         raise HTTPException(
             status_code=500,
@@ -354,7 +350,7 @@ async def websocket_endpoint(
 
             elif msg_type == "state_sync_request":
                 # Client requesting current state (after reconnect)
-                state = agent.get_session_state(session_id)
+                state = await agent.get_session_state(session_id)
                 if state:
                     await ws_manager.send_event(session_id, "state_sync", {
                         "current_node": state.get("current_node"),

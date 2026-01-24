@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Prevent indexing of API routes
+Disallow: /api/
+
+# Sitemaps
+# Sitemap: https://yourdomain.com/sitemap.xml

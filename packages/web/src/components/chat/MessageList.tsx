@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { cn, formatTime } from '@/lib/utils'
 import type { Message } from '@/types/agent'
 
@@ -9,13 +10,13 @@ interface MessageListProps {
   isTyping: boolean
 }
 
-export default function MessageList({ messages, streamingResponse, isTyping }: MessageListProps) {
+function MessageList({ messages, streamingResponse, isTyping }: MessageListProps) {
   return (
     <div className="space-y-4">
       {messages.map((message) => (
         <MessageBubble key={message.id} message={message} />
       ))}
-      
+
       {/* Streaming response */}
       {streamingResponse && (
         <div className="message message-assistant">
@@ -23,7 +24,7 @@ export default function MessageList({ messages, streamingResponse, isTyping }: M
           <span className="inline-block w-1 h-4 ml-0.5 bg-accent-cyan animate-pulse" />
         </div>
       )}
-      
+
       {/* Typing indicator (before streaming starts) */}
       {isTyping && !streamingResponse && (
         <div className="message message-assistant">
@@ -38,9 +39,11 @@ export default function MessageList({ messages, streamingResponse, isTyping }: M
   )
 }
 
-function MessageBubble({ message }: { message: Message }) {
+export default memo(MessageList)
+
+const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
-  
+
   return (
     <div className={cn(
       "flex",
@@ -60,4 +63,4 @@ function MessageBubble({ message }: { message: Message }) {
       </div>
     </div>
   )
-}
+})

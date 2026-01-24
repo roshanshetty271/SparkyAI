@@ -20,160 +20,94 @@ body {
   font-feature-settings: 'rlig' 1, 'calt' 1;
 }
 
-/* Scrollbar styling */
+/* Premium Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-enter {
+  animation: slide-up-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  @apply bg-dark-card/70 backdrop-blur-xl border border-white/5 shadow-2xl;
+}
+
+.glass-button {
+  @apply bg-white/5 hover:bg-white/10 border border-white/5 
+         backdrop-blur-md transition-all duration-300;
+}
+
+/* Scrollbar styling - Refined */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-dark-bg;
+  @apply bg-transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-dark-border rounded-full;
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-zinc-600;
-}
-
-/* Focus styles */
-*:focus-visible {
-  @apply outline-none ring-2 ring-accent-cyan ring-offset-2 ring-offset-dark-bg;
-}
-
-/* D3.js visualization styles */
-.viz-container {
-  @apply w-full h-full;
-}
-
-.viz-container svg {
-  @apply w-full h-full;
-}
-
-/* Node styles */
-.node-circle {
-  @apply transition-all duration-200;
-  cursor: pointer;
-}
-
-.node-circle:hover {
-  filter: brightness(1.2);
-}
-
-.node-label {
-  @apply fill-white text-xs font-medium pointer-events-none;
-  text-anchor: middle;
-  dominant-baseline: middle;
-}
-
-/* Edge styles */
-.edge-line {
-  @apply stroke-dark-border;
-  stroke-width: 2;
-  fill: none;
-}
-
-.edge-line.active {
-  @apply stroke-accent-blue;
-  stroke-width: 3;
-}
-
-/* Pulse animation for active nodes */
-@keyframes node-pulse {
-  0%, 100% {
-    r: 30;
-    opacity: 1;
-  }
-  50% {
-    r: 35;
-    opacity: 0.8;
-  }
-}
-
-.node-active {
-  animation: node-pulse 1s ease-in-out infinite;
-}
-
-/* Glow effect for connections */
-.glow-line {
-  filter: drop-shadow(0 0 4px currentColor);
-}
-
-/* Chat widget styles */
-.chat-bubble {
-  @apply fixed bottom-6 right-6 z-50;
-}
-
+/* Chat specific overrides */
 .chat-window {
-  @apply fixed bottom-24 right-6 z-50 w-96 h-[500px] 
-         bg-dark-card border border-dark-border rounded-2xl 
-         shadow-2xl overflow-hidden flex flex-col;
+  @apply fixed bottom-24 right-6 z-50 w-96 h-[600px] 
+         glass-panel rounded-3xl overflow-hidden flex flex-col
+         ring-1 ring-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)];
+  opacity: 0;
+  animation: slide-up-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
 }
 
-/* Message styles */
+.chat-bubble {
+  @apply fixed bottom-6 right-6 z-50 animate-float;
+}
+
+/* Message styles - Revised */
 .message {
-  @apply p-3 rounded-xl max-w-[85%] animate-slide-up;
+  @apply p-4 rounded-2xl max-w-[85%] text-sm leading-relaxed shadow-sm animate-enter;
 }
 
 .message-user {
-  @apply bg-accent-blue text-white ml-auto;
+  @apply bg-gradient-to-br from-accent-blue to-accent-purple text-white ml-auto
+         rounded-tr-sm;
 }
 
 .message-assistant {
-  @apply bg-dark-border text-white;
+  @apply bg-white/5 text-white/90 border border-white/5 backdrop-blur-sm
+         rounded-tl-sm;
 }
 
 /* Typing indicator */
 .typing-indicator {
-  @apply flex space-x-1 p-3;
+  @apply flex space-x-1.5 p-1;
 }
 
 .typing-dot {
-  @apply w-2 h-2 bg-zinc-500 rounded-full;
-  animation: typing 1.4s infinite;
+  @apply w-1.5 h-1.5 bg-accent-cyan rounded-full;
+  animation: typing 1.4s infinite ease-in-out;
 }
 
-.typing-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.4;
-  }
-  30% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
-}
-
-/* Embedding space explorer */
-.embedding-point {
-  @apply transition-all duration-300;
-  cursor: pointer;
-}
-
-.embedding-point:hover {
-  transform: scale(1.5);
-}
-
-.embedding-connection {
-  @apply transition-all duration-500;
-  stroke-linecap: round;
-}
-
-/* Timeline styles */
-.timeline-bar {
-  @apply h-8 rounded transition-all duration-300;
-}
-
-.timeline-label {
-  @apply text-xs font-mono text-zinc-400;
+/* Text selections */
+::selection {
+  @apply bg-accent-cyan/20 text-accent-cyan;
 }

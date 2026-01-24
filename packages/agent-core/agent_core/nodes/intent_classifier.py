@@ -20,7 +20,8 @@ from agent_core.utils import CircuitBreakerError, get_openai_breaker, get_tracer
 # Valid intents for each domain
 VALID_INTENTS_PERSONAL = {
     "greeting", "skill_question", "project_inquiry",
-    "experience_question", "contact_request", "general", "off_topic"
+    "experience_question", "contact_request", "general", "off_topic",
+    "schedule_meeting", "send_email" # New Action Intents
 }
 
 VALID_INTENTS_BUZZY = {
@@ -167,11 +168,17 @@ def route_after_intent(state: AgentState) -> Literal["rag_retriever", "response_
     # Direct response intents (no RAG needed)
     direct_intents = {"greeting", "contact_request", "demo_request"}
 
+    # Action intents (Tools)
+    tool_intents = {"schedule_meeting", "send_email"}
+
     # Fallback intents
     fallback_intents = {"off_topic"}
 
     if intent in fallback_intents:
         return "fallback_response"
+    elif intent in tool_intents:
+        # Route to response_generator first so it can generate the tool call
+        return "response_generator"
     elif intent in direct_intents:
         return "response_generator"
     else:

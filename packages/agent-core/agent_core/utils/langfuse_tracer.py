@@ -77,7 +77,7 @@ class LangfuseTracer:
         Returns:
             CallbackHandler instance if Langfuse is enabled, else None
         """
-        if not self.enabled:
+        if not self.enabled or CallbackHandler is None:
             return None
 
         try:

@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import type { NodeState, RetrievedChunk, QueryProjection, NodeTiming, Message } from '@/types/agent'
 
+let tokenQueue: string[] = []
+let trickleInterval: NodeJS.Timeout | null = null
+
 interface AgentState {
   // Connection state
   sessionId: string | null
@@ -87,13 +90,48 @@ export const useAgentStore = create<AgentState>((set) => ({
     messages: [...state.messages, message],
   })),
 
-  setTyping: (typing) => set({ isTyping: typing }),
+  setTyping: (typing) => {
+    if (!typing) {
+      // Flush queue and stop interval when done
+      if (trickleInterval) clearInterval(trickleInterval)
+      trickleInterval = null
 
-  appendStreamingResponse: (token) => set((state) => ({
-    streamingResponse: state.streamingResponse + token,
-  })),
+      const remaining = tokenQueue.join('')
+      tokenQueue = []
 
-  clearStreamingResponse: () => set({ streamingResponse: '' }),
+      set((state) => ({
+        isTyping: false,
+        streamingResponse: state.streamingResponse + remaining
+      }))
+    } else {
+      set({ isTyping: true })
+    }
+  },
+
+  appendStreamingResponse: (token) => {
+    tokenQueue.push(token)
+
+    if (!trickleInterval) {
+      trickleInterval = setInterval(() => {
+        if (tokenQueue.length > 0) {
+          const next = tokenQueue.shift()
+          set((state) => ({
+            streamingResponse: state.streamingResponse + next,
+          }))
+        } else {
+          // Keep interval running while typing is active
+          // or we can clear if we want, but let's keep it until setTyping(false)
+        }
+      }, 30) // 30ms per token = very smooth flow
+    }
+  },
+
+  clearStreamingResponse: () => {
+    if (trickleInterval) clearInterval(trickleInterval)
+    trickleInterval = null
+    tokenQueue = []
+    set({ streamingResponse: '' })
+  },
 
   setCurrentNode: (node) => set({ currentNode: node }),
 
@@ -124,18 +162,23 @@ export const useAgentStore = create<AgentState>((set) => ({
     estimatedCost: cost,
   }),
 
-  resetState: () => set({
-    currentNode: null,
-    nodeStates: { ...initialNodeStates },
-    userIntent: null,
-    retrievedChunks: [],
-    retrievalConfidence: 0,
-    queryProjection: null,
-    traceId: null,
-    nodeTimings: [],
-    totalTokens: 0,
-    estimatedCost: 0,
-    streamingResponse: '',
-    isTyping: false,
-  }),
+  resetState: () => {
+    if (trickleInterval) clearInterval(trickleInterval)
+    trickleInterval = null
+    tokenQueue = []
+    set({
+      currentNode: null,
+      nodeStates: { ...initialNodeStates },
+      userIntent: null,
+      retrievedChunks: [],
+      retrievalConfidence: 0,
+      queryProjection: null,
+      traceId: null,
+      nodeTimings: [],
+      totalTokens: 0,
+      estimatedCost: 0,
+      streamingResponse: '',
+      isTyping: false,
+    })
+  },
 }))

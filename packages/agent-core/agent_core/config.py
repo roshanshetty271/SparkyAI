@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     aws_s3_bucket: str = Field(default="sparky-ai-embeddings", description="S3 bucket name")
     aws_region: str = Field(default="us-east-1", description="AWS region")
 
+    # SMTP Settings (for Gmail Tool)
+    smtp_user: str = Field(default="", env="SMTP_USER", description="SMTP User (Gmail)")
+    smtp_pass: str = Field(default="", env="SMTP_PASS", description="SMTP Password")
+
     # Budget Protection
     daily_budget_usd: float = Field(default=2.0, description="Daily budget cap in USD")
     monthly_budget_usd: float = Field(default=30.0, description="Monthly budget cap in USD")

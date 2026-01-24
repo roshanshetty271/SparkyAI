@@ -22,8 +22,15 @@ body {
 
 /* Premium Animations */
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-6px); }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 .animate-float {
@@ -35,6 +42,7 @@ body {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -51,8 +59,7 @@ body {
 }
 
 .glass-button {
-  @apply bg-white/5 hover:bg-white/10 border border-white/5 
-         backdrop-blur-md transition-all duration-300;
+  @apply bg-white/5 hover:bg-white/10 border border-white/5 backdrop-blur-md transition-all duration-300;
 }
 
 /* Scrollbar styling - Refined */
@@ -71,9 +78,8 @@ body {
 
 /* Chat specific overrides */
 .chat-window {
-  @apply fixed bottom-24 right-6 z-50 w-96 h-[600px] 
-         glass-panel rounded-3xl overflow-hidden flex flex-col
-         ring-1 ring-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)];
+  @apply fixed bottom-6 right-6 z-50 w-96 h-[600px] max-h-[calc(100vh-2rem)] glass-panel rounded-3xl overflow-hidden flex flex-col ring-1 ring-white/10;
+  box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.5);
   opacity: 0;
   animation: slide-up-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
 }
@@ -88,13 +94,11 @@ body {
 }
 
 .message-user {
-  @apply bg-gradient-to-br from-accent-blue to-accent-purple text-white ml-auto
-         rounded-tr-sm;
+  @apply bg-gradient-to-br from-accent-blue to-accent-purple text-white ml-auto rounded-tr-sm;
 }
 
 .message-assistant {
-  @apply bg-white/5 text-white/90 border border-white/5 backdrop-blur-sm
-         rounded-tl-sm;
+  @apply bg-white/5 text-white/90 border border-white/5 backdrop-blur-sm rounded-tl-sm;
 }
 
 /* Typing indicator */
@@ -110,4 +114,16 @@ body {
 /* Text selections */
 ::selection {
   @apply bg-accent-cyan/20 text-accent-cyan;
+}
+
+/* No Scrollbar Utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }

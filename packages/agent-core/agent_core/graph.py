@@ -11,8 +11,10 @@ from typing import Any, AsyncIterator, Dict, Literal, Optional
 
 from langchain_core.messages import messages_from_dict, messages_to_dict
 from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode
 
 from agent_core.config import settings
+from agent_core.tools import tools_list
 from agent_core.nodes import (
     fallback_response_node,
     greeter_node,
@@ -28,6 +30,19 @@ from agent_core.utils import get_tracer
 from agent_core.utils.redis import get_redis
 
 
+    # ... (imports)
+from langgraph.prebuilt import ToolNode
+from agent_core.tools import tools_list
+
+def route_after_response(state: AgentState) -> Literal["tools", "__end__"]:
+    """
+    Determine if we should route to tools or end.
+    """
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+    return END
+
 def create_agent_graph() -> StateGraph:
     """
     Create the LangGraph StateGraph for the agent.
@@ -38,14 +53,14 @@ def create_agent_graph() -> StateGraph:
                     ┌──────────┼──────────┐
                     ▼          ▼          ▼
               rag_retriever  response   fallback
-                    │       generator
-                    ▼          │          │
-              ┌─────┴─────┐    │          │
-              ▼           ▼    │          │
-           response   fallback │          │
-           generator     │     │          │
-              │          │     │          │
-              └──────────┴─────┴──────────┘
+                    │       generator This │
+                    ▼        │    ▲       │
+              ┌─────┴─────┐  ▼    │       │
+              ▼           ▼ tools │       │
+           response   fallback    │       │
+           generator     │        │       │
+              │          │        │       │
+              └──────────┴────────┴───────┘
                                │
                               END
     
@@ -62,6 +77,7 @@ def create_agent_graph() -> StateGraph:
     graph.add_node("rag_retriever", rag_retriever_node)
     graph.add_node("response_generator", response_generator_node)
     graph.add_node("fallback_response", fallback_response_node)
+    graph.add_node("tools", ToolNode(tools_list))
 
     # Set entry point
     graph.set_entry_point("greeter")
@@ -78,6 +94,7 @@ def create_agent_graph() -> StateGraph:
             "rag_retriever": "rag_retriever",
             "response_generator": "response_generator",
             "fallback_response": "fallback_response",
+            "tools": "tools", # Kept for safety, though mostly re-routed
         }
     )
 
@@ -90,9 +107,21 @@ def create_agent_graph() -> StateGraph:
             "fallback_response": "fallback_response",
         }
     )
+    
+    # Check if we need to run tools after response generation
+    graph.add_conditional_edges(
+        "response_generator",
+        route_after_response,
+        {
+            "tools": "tools",
+            END: END
+        }
+    )
+    
+    # Tools go back to response generator to confirm action
+    graph.add_edge("tools", "response_generator")
 
-    # Terminal nodes go to END
-    graph.add_edge("response_generator", END)
+    # Terminal nodes
     graph.add_edge("fallback_response", END)
 
     return graph.compile()
@@ -342,60 +371,110 @@ class AgentGraph:
             # Route after RAG
             next_node = route_after_rag(state)
 
-        # Generate response (streaming)
-        if next_node == "response_generator":
-            yield {
-                "event": "node_enter",
-                "payload": {"node": "response_generator"}
-            }
+        # Ensure looping for tools works
+        loop_active = True
+        loop_count = 0
+        MAX_LOOPS = 5
+        
+        while loop_active and loop_count < MAX_LOOPS:
+            loop_active = False # Default to single pass
+            loop_count += 1
 
-            async for update in response_generator_streaming(state):
-                state = {**state, **update}
-
-                if "streaming_tokens" in update and update["streaming_tokens"]:
-                    # Emit token event
-                    yield {
-                        "event": "token",
-                        "payload": {
-                            "token": update["streaming_tokens"][-1],
-                            "full_response": state.get("response", ""),
-                        }
-                    }
-
-                if update.get("response_complete"):
-                    yield {
-                        "event": "node_complete",
-                        "payload": {
-                            "node": "response_generator",
-                            "node_states": state["node_states"],
-                        }
-                    }
-
-        elif next_node == "fallback_response":
-            yield {
-                "event": "node_enter",
-                "payload": {"node": "fallback_response"}
-            }
-
-            fallback_update = fallback_response_node(state)
-            state = {**state, **fallback_update}
-
-            yield {
-                "event": "node_complete",
-                "payload": {
-                    "node": "fallback_response",
-                    "node_states": state["node_states"],
+            # Generate response (streaming)
+            if next_node == "response_generator":
+                yield {
+                    "event": "node_enter",
+                    "payload": {"node": "response_generator"}
                 }
-            }
 
-            # Emit response as tokens for consistency
-            yield {
-                "event": "token",
-                "payload": {
-                    "token": state["response"],
-                    "full_response": state["response"],
+                async for update in response_generator_streaming(state):
+                    state = {**state, **update}
+
+                    if "streaming_tokens" in update and update["streaming_tokens"]:
+                        yield {
+                            "event": "token",
+                            "payload": {
+                                "token": update["streaming_tokens"][-1],
+                                "full_response": state.get("response", ""),
+                            }
+                        }
+
+                    if update.get("response_complete"):
+                        yield {
+                            "event": "node_complete",
+                            "payload": {
+                                "node": "response_generator",
+                                "node_states": state["node_states"],
+                            }
+                        }
+                
+                # Check for tool calls
+                if route_after_response(state) == "tools":
+                    next_node = "tools"
+                    loop_active = True # Continue loop
+                else:
+                    next_node = END
+
+            elif next_node == "tools":
+                yield {
+                    "event": "node_enter",
+                    "payload": {"node": "tools"}
                 }
-            }
+                
+                # Execute tools
+                tool_node = ToolNode(tools_list)
+                tool_output = await tool_node.ainvoke(state)
+                
+                # Update state with tool messages (APPEND, don't overwrite)
+                # State messages are usually a list, so we extend it
+                current_messages = state.get("messages", [])
+                new_tool_messages = tool_output["messages"]
+                
+                if isinstance(current_messages, list) and isinstance(new_tool_messages, list):
+                    state["messages"] = current_messages + new_tool_messages
+                else:
+                    # Fallback if types are unexpected (shouldn't happen with standard LangGraph state)
+                    state["messages"] = new_tool_messages
+                
+                yield {
+                    "event": "node_complete",
+                    "payload": {
+                        "node": "tools",
+                        "node_states": state["node_states"],
+                    }
+                }
+                
+                # Loop back to response generator
+                next_node = "response_generator"
+                loop_active = True
+
+            elif next_node == "fallback_response":
+                yield {
+                    "event": "node_enter",
+                    "payload": {"node": "fallback_response"}
+                }
+
+                fallback_update = fallback_response_node(state)
+                state = {**state, **fallback_update}
+
+                yield {
+                    "event": "node_complete",
+                    "payload": {
+                        "node": "fallback_response",
+                        "node_states": state["node_states"],
+                    }
+                }
+
+                # Emit response as tokens for consistency
+                yield {
+                    "event": "token",
+                    "payload": {
+                        "token": state["response"],
+                        "full_response": state["response"],
+                    }
+                }
+                
+                next_node = END
 
         # Save session
         await self._save_session(session_id, state)
